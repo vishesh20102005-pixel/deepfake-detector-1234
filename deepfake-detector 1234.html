@@ -1,0 +1,2019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepScan v2 — Advanced Deepfake Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  :root {
+    --bg:#030810;--panel:#070e1c;--panel2:#0a1428;--border:#0d2040;--border2:#142a52;
+    --accent:#00f5c4;--accent2:#00c4f5;--danger:#ff3366;--warn:#ffb800;--safe:#00f5c4;
+    --text:#c8dff5;--muted:#3a5577;
+    --glow:0 0 24px rgba(0,245,196,0.35);--glow-danger:0 0 24px rgba(255,51,102,0.45);--glow-warn:0 0 24px rgba(255,184,0,0.35);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(0,245,196,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,196,0.025) 1px,transparent 1px);background-size:40px 40px}
+  body::after{content:'';position:fixed;top:-50%;left:-50%;width:200%;height:200%;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 65% 15%,rgba(0,80,255,0.07) 0%,transparent 50%),radial-gradient(ellipse at 15% 85%,rgba(0,245,196,0.05) 0%,transparent 50%);animation:drift 20s ease-in-out infinite alternate}
+  @keyframes drift{from{transform:translate(0,0)}to{transform:translate(30px,-20px)}}
+
+  header{position:relative;z-index:10;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);backdrop-filter:blur(12px);background:rgba(3,8,16,0.6)}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-icon{width:32px;height:32px}
+  .logo-icon svg{width:100%;height:100%}
+  .logo-text{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:4px;color:#fff}
+  .logo-ver{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--accent);letter-spacing:3px}
+  .header-right{display:flex;align-items:center;gap:20px}
+  .stat-pill{display:flex;flex-direction:column;align-items:center}
+  .stat-pill-val{font-family:'Bebas Neue',sans-serif;font-size:20px;color:#fff;line-height:1}
+  .stat-pill-lbl{font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:2px}
+  .sys-status{display:flex;align-items:center;gap:8px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted)}
+  .status-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+  .tab-bar{position:relative;z-index:10;display:flex;border-bottom:1px solid var(--border);padding:0 28px;background:rgba(3,8,16,0.4)}
+  .tab{padding:11px 20px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.2s}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tab:hover:not(.active){color:var(--text)}
+  .tab-content{display:none}
+  .tab-content.active{display:block}
+
+  .page{position:relative;z-index:10;max-width:1280px;margin:0 auto;padding:20px}
+  .cam-layout{display:grid;grid-template-columns:1fr 350px;gap:18px}
+  .camera-section{display:flex;flex-direction:column;gap:14px}
+
+  .camera-wrapper{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:4px;overflow:hidden;aspect-ratio:16/10;transition:border-color 0.3s,box-shadow 0.3s}
+  .camera-wrapper.scanning{border-color:var(--accent);box-shadow:var(--glow),inset 0 0 40px rgba(0,245,196,0.02)}
+  .camera-wrapper.fake-detected{border-color:var(--danger);box-shadow:var(--glow-danger);animation:flicker 0.6s ease infinite}
+  .camera-wrapper.uncertain-state{border-color:var(--warn);box-shadow:var(--glow-warn)}
+  @keyframes flicker{0%,100%{box-shadow:var(--glow-danger)}50%{box-shadow:0 0 50px rgba(255,51,102,0.7)}}
+
+  #video{width:100%;height:100%;object-fit:cover;display:block}
+  #canvas{display:none}
+  .camera-overlay{position:absolute;inset:0;pointer-events:none}
+  .corner{position:absolute;width:20px;height:20px;border-color:var(--accent);border-style:solid;opacity:0.7;transition:border-color 0.3s}
+  .corner.tl{top:12px;left:12px;border-width:2px 0 0 2px}
+  .corner.tr{top:12px;right:12px;border-width:2px 2px 0 0}
+  .corner.bl{bottom:12px;left:12px;border-width:0 0 2px 2px}
+  .corner.br{bottom:12px;right:12px;border-width:0 2px 2px 0}
+  .camera-wrapper.fake-detected .corner{border-color:var(--danger)}
+  .camera-wrapper.uncertain-state .corner{border-color:var(--warn)}
+  .scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0;animation:scanMove 3s ease-in-out infinite;display:none}
+  @keyframes scanMove{0%{top:0;opacity:0}10%{opacity:0.9}90%{opacity:0.9}100%{top:100%;opacity:0}}
+  .face-box{position:absolute;border:2px solid var(--accent);border-radius:2px;display:none;pointer-events:none;animation:boxPulse 1.5s ease-in-out infinite}
+  .face-box.fake{border-color:var(--danger)}
+  .face-box.uncertain{border-color:var(--warn)}
+  @keyframes boxPulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  .face-label{position:absolute;top:-20px;left:0;font-family:'Share Tech Mono',monospace;font-size:8px;padding:2px 7px;background:var(--accent);color:#000;font-weight:700;letter-spacing:1px;white-space:nowrap}
+  .face-label.fake{background:var(--danger);color:#fff}
+  .face-label.uncertain{background:var(--warn);color:#000}
+  .threat-bar{position:absolute;bottom:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--safe) 0%,var(--warn) 50%,var(--danger) 100%);opacity:0.12}
+  .threat-indicator{position:absolute;bottom:0;left:0;width:3px;height:10px;background:#fff;transition:left 0.8s cubic-bezier(0.4,0,0.2,1);box-shadow:0 0 5px #fff}
+
+  /* Intruder screenshot gallery */
+  .intruder-gallery{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto}
+  .intruder-gallery::-webkit-scrollbar{width:3px}
+  .intruder-gallery::-webkit-scrollbar-thumb{background:var(--danger);border-radius:2px}
+  .intruder-thumb-row{display:flex;align-items:center;gap:10px;padding:7px 8px;background:rgba(255,51,102,0.06);border:1px solid rgba(255,51,102,0.2);border-radius:3px;cursor:pointer;transition:all 0.2s}
+  .intruder-thumb-row:hover{border-color:var(--danger);background:rgba(255,51,102,0.12)}
+  .intruder-thumb{width:60px;height:40px;object-fit:cover;border-radius:2px;flex-shrink:0;border:1px solid rgba(255,51,102,0.4)}
+  .intruder-thumb-info{flex:1;min-width:0}
+  .intruder-thumb-time{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--danger);letter-spacing:1px}
+  .intruder-thumb-desc{font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);margin-top:2px}
+  .intruder-thumb-dl{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);padding:4px 8px;border:1px solid var(--border);border-radius:2px;cursor:pointer;transition:all 0.2s;background:transparent;white-space:nowrap}
+  .intruder-thumb-dl:hover{border-color:var(--danger);color:var(--danger)}
+  .intruder-empty{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);text-align:center;padding:14px 0;letter-spacing:1px}
+  .intruder-flash{position:absolute;inset:0;background:#fff;z-index:20;pointer-events:none;opacity:0;animation:flashAnim 0.4s ease forwards}
+  @keyframes flashAnim{0%{opacity:0.8}100%{opacity:0}}
+
+  /* Lightbox */
+  .lightbox{position:fixed;inset:0;background:rgba(3,8,16,0.95);z-index:200;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;backdrop-filter:blur(8px)}
+  .lightbox.open{display:flex}
+  .lightbox img{max-width:90vw;max-height:75vh;border:1px solid var(--danger);border-radius:4px;box-shadow:0 0 40px rgba(255,51,102,0.3)}
+  .lightbox-meta{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--danger);letter-spacing:2px;text-align:center}
+  .lightbox-close{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;padding:8px 20px;border:1px solid var(--border);border-radius:2px;transition:all 0.2s}
+  .lightbox-close:hover{border-color:var(--danger);color:var(--danger)}
+
+  /* Intruder warning */
+  .intruder-banner{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(255,51,102,0.92);color:#fff;padding:6px 16px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;border-radius:2px;display:none;white-space:nowrap;backdrop-filter:blur(4px);box-shadow:0 0 20px rgba(255,51,102,0.5);animation:intruderPulse 0.8s ease-in-out infinite}
+  @keyframes intruderPulse{0%,100%{opacity:1;transform:translateX(-50%) scale(1)}50%{opacity:0.8;transform:translateX(-50%) scale(1.02)}}
+
+  /* Face count indicator */
+  .face-count-badge{position:absolute;top:10px;right:10px;z-index:5;background:rgba(7,14,28,0.85);border:1px solid var(--border2);padding:5px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;border-radius:2px;display:none;backdrop-filter:blur(4px)}
+  .face-count-badge.multi{border-color:var(--danger);color:var(--danger)}
+  .face-count-badge.single{border-color:var(--accent);color:var(--accent)}
+
+  .placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+  .placeholder-icon{width:65px;height:65px;border:2px solid var(--muted);border-radius:50%;display:flex;align-items:center;justify-content:center;opacity:0.3}
+  .placeholder p{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:2px}
+  .analyzing-overlay{position:absolute;inset:0;background:rgba(3,8,16,0.8);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;backdrop-filter:blur(3px)}
+  .analyzing-overlay.active{display:flex}
+  .spinner{width:36px;height:36px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .analyzing-text{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:3px;animation:blink 1s step-end infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+  .cam-controls-row{display:flex;gap:10px;align-items:center}
+  .sensitivity-wrap{display:flex;align-items:center;gap:8px;flex:1;background:var(--panel);border:1px solid var(--border);padding:8px 12px;border-radius:3px}
+  .sensitivity-wrap label{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:2px;white-space:nowrap}
+  input[type=range]{flex:1;-webkit-appearance:none;height:2px;background:var(--border2);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 5px var(--accent)}
+  .sensitivity-val{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--accent);min-width:20px;text-align:right}
+  select{background:transparent;border:none;color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:9px;cursor:pointer;outline:none}
+  select option{background:var(--panel);color:var(--text)}
+
+  .controls{display:flex;gap:8px}
+  .btn{flex:1;padding:11px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;border:1px solid;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;background:transparent;border-radius:2px}
+  .btn::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity 0.2s}
+  .btn:hover::before{opacity:0.08}
+  .btn-primary{border-color:var(--accent);color:var(--accent)}
+  .btn-primary::before{background:var(--accent)}
+  .btn-primary:hover{box-shadow:var(--glow)}
+  .btn-secondary{border-color:var(--muted);color:var(--muted)}
+  .btn-secondary::before{background:var(--muted)}
+  .btn-secondary:hover{border-color:var(--text);color:var(--text)}
+  .btn-danger{border-color:var(--danger);color:var(--danger)}
+  .btn-danger::before{background:var(--danger)}
+  .btn-danger:hover{box-shadow:var(--glow-danger)}
+  .btn-warn{border-color:var(--warn);color:var(--warn)}
+  .btn-warn::before{background:var(--warn)}
+  .btn:disabled{opacity:0.25;cursor:not-allowed}
+
+  .panel-section{display:flex;flex-direction:column;gap:14px}
+  .panel-card{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:16px}
+  .panel-title{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--accent);letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .panel-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+  .verdict-display{text-align:center;padding:8px 0}
+  .verdict-ring{width:105px;height:105px;margin:0 auto 10px;position:relative}
+  .verdict-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .verdict-ring .track{fill:none;stroke:var(--border);stroke-width:6}
+  .verdict-ring .progress{fill:none;stroke:var(--accent);stroke-width:6;stroke-linecap:round;stroke-dasharray:283;stroke-dashoffset:283;transition:stroke-dashoffset 1s ease,stroke 0.3s}
+  .verdict-percent{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .verdict-number{font-family:'Bebas Neue',sans-serif;font-size:32px;line-height:1;color:#fff;transition:color 0.3s}
+  .verdict-label-small{font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:2px}
+  .verdict-text{font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:4px;color:var(--muted);transition:color 0.3s}
+  .verdict-sub{font-size:9px;color:var(--muted);margin-top:4px;font-family:'Share Tech Mono',monospace;letter-spacing:1px;min-height:14px;transition:color 0.3s;line-height:1.5}
+
+  .metric-row{display:flex;flex-direction:column;gap:8px}
+  .metric-item{display:flex;flex-direction:column;gap:3px}
+  .metric-header{display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)}
+  .metric-val{color:var(--text)}
+  .metric-bar{height:2px;background:var(--border);border-radius:2px;overflow:hidden}
+  .metric-fill{height:100%;border-radius:2px;transition:width 0.8s ease;background:var(--accent);width:0%}
+
+  .breakdown-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .breakdown-item{padding:7px 9px;background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:2px}
+  .breakdown-name{font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px}
+  .breakdown-val{font-family:'Bebas Neue',sans-serif;font-size:15px;color:var(--text);transition:color 0.3s}
+
+  .suggestion-list{display:flex;flex-direction:column;gap:7px}
+  .suggestion-item{display:flex;gap:9px;padding:9px 11px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:2px;border-left:3px solid var(--accent)}
+  .suggestion-item.warn{border-left-color:var(--warn)}
+  .suggestion-item.danger{border-left-color:var(--danger)}
+  .suggestion-icon{font-size:13px;flex-shrink:0;line-height:1.5}
+  .suggestion-text{font-size:10px;color:var(--text);line-height:1.6}
+  .suggestion-empty{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;padding:10px 0;text-align:center}
+
+  .history-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-family:'Share Tech Mono',monospace;font-size:8px}
+  .history-badge{padding:2px 7px;border-radius:2px;font-size:7px;letter-spacing:1px}
+  .history-badge.real{background:rgba(0,245,196,0.12);color:var(--accent)}
+  .history-badge.fake{background:rgba(255,51,102,0.12);color:var(--danger)}
+  .history-badge.uncertain{background:rgba(255,184,0,0.12);color:var(--warn)}
+  .history-time{color:var(--muted);flex:1}
+  .history-conf{color:var(--text)}
+
+  .log-area{height:140px;overflow-y:auto;font-family:'Share Tech Mono',monospace;font-size:8px;line-height:2}
+  .log-area::-webkit-scrollbar{width:3px}
+  .log-area::-webkit-scrollbar-thumb{background:var(--muted);border-radius:2px}
+  .log-entry{display:flex;gap:8px;padding:1px 0;border-bottom:1px solid rgba(13,32,64,0.4);animation:fadeIn 0.3s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1}}
+  .log-time{color:var(--muted);flex-shrink:0}
+  .log-msg{color:var(--text)}
+  .log-msg.warn{color:var(--warn)}
+  .log-msg.danger{color:var(--danger)}
+  .log-msg.safe{color:var(--accent)}
+
+  /* Upload */
+  .upload-zone{border:2px dashed var(--border2);border-radius:6px;padding:40px 30px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:rgba(0,245,196,0.04);box-shadow:var(--glow)}
+  .upload-zone *{pointer-events:none}
+  .upload-icon{font-size:36px;opacity:0.4}
+  #uploadedPreview{max-width:100%;max-height:360px;border:1px solid var(--border);border-radius:4px;display:none;margin:14px auto}
+
+  /* Stats */
+  .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+  .stat-card{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:18px;text-align:center}
+  .stat-big{font-family:'Bebas Neue',sans-serif;font-size:44px;line-height:1}
+  .stat-big.green{color:var(--accent)}
+  .stat-big.red{color:var(--danger)}
+  .stat-big.yellow{color:var(--warn)}
+  .stat-lbl{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:2px;margin-top:4px}
+  .chart-bar-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+  .chart-bar-label{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);width:70px;flex-shrink:0}
+  .chart-bar-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+  .chart-bar-fill{height:100%;border-radius:3px;transition:width 1s ease}
+  .chart-bar-val{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text);width:24px;text-align:right;flex-shrink:0}
+
+  .export-btn{display:flex;align-items:center;gap:7px;padding:8px 14px;background:var(--panel);border:1px solid var(--border);border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);cursor:pointer;transition:all 0.2s}
+  .export-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+  .alert-banner{position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:100;background:var(--danger);color:#fff;padding:11px 28px;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;border-radius:2px;box-shadow:0 0 30px rgba(255,51,102,0.6);display:none;animation:alertSlide 0.4s ease}
+  @keyframes alertSlide{from{top:60px;opacity:0}to{top:76px;opacity:1}}
+
+  @media(max-width:900px){
+    .cam-layout{grid-template-columns:1fr}
+    header{padding:12px 14px}
+    .tab-bar{padding:0 14px}
+    .page{padding:12px}
+    .stats-grid{grid-template-columns:repeat(2,1fr)}
+    .header-right .stat-pill:nth-child(n+3){display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- Full-screen intruder blur overlay — fixed over entire page -->
+<canvas id="blurCanvas" style="display:none;position:fixed;inset:0;width:100vw;height:100vh;z-index:9999;pointer-events:none"></canvas>
+
+<div class="alert-banner" id="alertBanner">⚠ DEEPFAKE DETECTED — HIGH CONFIDENCE</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 36 36" fill="none">
+        <circle cx="18" cy="18" r="16" stroke="#00f5c4" stroke-width="1.5" opacity="0.25"/>
+        <circle cx="18" cy="18" r="10" stroke="#00f5c4" stroke-width="1.5" opacity="0.5"/>
+        <circle cx="18" cy="18" r="4" fill="#00f5c4"/>
+        <line x1="18" y1="2" x2="18" y2="8" stroke="#00f5c4" stroke-width="1.5"/>
+        <line x1="18" y1="28" x2="18" y2="34" stroke="#00f5c4" stroke-width="1.5"/>
+        <line x1="2" y1="18" x2="8" y2="18" stroke="#00f5c4" stroke-width="1.5"/>
+        <line x1="28" y1="18" x2="34" y2="18" stroke="#00f5c4" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">DeepScan</div>
+      <div class="logo-ver">v2.0 — Advanced Detection System</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="stat-pill"><div class="stat-pill-val" id="hTotalScans">0</div><div class="stat-pill-lbl">TOTAL SCANS</div></div>
+    <div class="stat-pill"><div class="stat-pill-val" style="color:var(--danger)" id="hFakeCount">0</div><div class="stat-pill-lbl">FAKES FOUND</div></div>
+    <div class="stat-pill"><div class="stat-pill-val" style="color:var(--accent)" id="hRealCount">0</div><div class="stat-pill-lbl">REAL VERIFIED</div></div>
+    <div class="stat-pill"><div class="stat-pill-val" style="color:var(--warn)" id="hAvgConf">—</div><div class="stat-pill-lbl">AVG CONFIDENCE</div></div>
+    <div class="sys-status">
+      <div class="status-dot"></div>
+      <span id="systemStatus">READY</span>
+    </div>
+  </div>
+</header>
+
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('camera',this)">📷 LIVE CAMERA</div>
+  <div class="tab" onclick="switchTab('upload',this)">🖼 IMAGE UPLOAD</div>
+  <div class="tab" onclick="switchTab('stats',this)">📊 SESSION STATS</div>
+  <div class="tab" onclick="switchTab('tips',this)">💡 IMPROVEMENTS</div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" alt="Intruder capture">
+  <div class="lightbox-meta" id="lightboxMeta"></div>
+  <div style="display:flex;gap:12px">
+    <button class="lightbox-close" onclick="downloadLightbox(event)">⬇ DOWNLOAD</button>
+    <div class="lightbox-close" onclick="closeLightbox()">✕ CLOSE</div>
+  </div>
+</div>
+
+<!-- CAMERA TAB -->
+<div class="tab-content active" id="tab-camera">
+<div class="page">
+<div class="cam-layout">
+  <div class="camera-section">
+    <div class="camera-wrapper" id="cameraWrapper">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas"></canvas>
+      <div class="intruder-banner" id="intruderBanner">⚠ MULTIPLE FACES — INTRUDER BLURRED</div>
+      <div class="face-count-badge" id="faceCountBadge">👤 1 FACE</div>
+      <div class="intruder-flash" id="intruderFlash" style="display:none"></div>
+      <div class="camera-overlay">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="scan-line" id="scanLine"></div>
+        <div class="face-box" id="faceBox"><div class="face-label" id="faceLabel">SCANNING</div></div>
+        <div class="threat-bar"></div>
+        <div class="threat-indicator" id="threatIndicator"></div>
+      </div>
+      <div class="placeholder" id="placeholder">
+        <div class="placeholder-icon">
+          <svg width="34" height="34" viewBox="0 0 40 40" fill="none">
+            <circle cx="20" cy="15" r="6" stroke="#3a5577" stroke-width="2"/>
+            <path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" stroke="#3a5577" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p>Camera Inactive</p>
+      </div>
+      <div class="analyzing-overlay" id="analyzingOverlay">
+        <div class="spinner"></div>
+        <div class="analyzing-text" id="analyzingText">ANALYZING...</div>
+      </div>
+    </div>
+
+    <div class="cam-controls-row">
+      <div class="sensitivity-wrap">
+        <label>SENSITIVITY</label>
+        <input type="range" id="sensitivitySlider" min="1" max="5" value="3" oninput="updateSensitivity(this.value)">
+        <span class="sensitivity-val" id="sensitivityVal">3</span>
+      </div>
+      <div class="sensitivity-wrap" style="flex:none;gap:6px">
+        <label>AUTO INTERVAL</label>
+        <select id="intervalSelect">
+          <option value="5000">5s</option>
+          <option value="8000" selected>8s</option>
+          <option value="15000">15s</option>
+          <option value="30000">30s</option>
+        </select>
+      </div>
+      <div class="sensitivity-wrap" style="flex:none;gap:6px;cursor:pointer" onclick="toggleBlurGuard()" title="Blur extra faces that enter frame">
+        <label style="cursor:pointer">👥 BLUR GUARD</label>
+        <span id="blurGuardStatus" style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">OFF</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-primary" id="startBtn" onclick="startCamera()">▶ START</button>
+      <button class="btn btn-secondary" id="analyzeBtn" onclick="analyzeFrame()" disabled>⊙ ANALYZE</button>
+      <button class="btn btn-secondary" id="autoBtn" onclick="toggleAuto()" disabled>⟳ AUTO</button>
+      <button class="btn btn-warn" id="screenshotBtn" onclick="saveScreenshot()" disabled>📸 CAPTURE</button>
+      <button class="btn btn-danger" id="stopBtn" onclick="stopCamera()" disabled>■ STOP</button>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Analysis Breakdown</div>
+      <div class="breakdown-grid">
+        <div class="breakdown-item"><div class="breakdown-name">Facial Coherence</div><div class="breakdown-val" id="bFacial">—</div></div>
+        <div class="breakdown-item"><div class="breakdown-name">Texture Artifacts</div><div class="breakdown-val" id="bTexture">—</div></div>
+        <div class="breakdown-item"><div class="breakdown-name">Blink Pattern</div><div class="breakdown-val" id="bBlink">—</div></div>
+        <div class="breakdown-item"><div class="breakdown-name">Edge Consistency</div><div class="breakdown-val" id="bEdge">—</div></div>
+        <div class="breakdown-item"><div class="breakdown-name">Skin Uniformity</div><div class="breakdown-val" id="bSkin">—</div></div>
+        <div class="breakdown-item"><div class="breakdown-name">Lighting Match</div><div class="breakdown-val" id="bLight">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <div class="panel-card">
+      <div class="panel-title">Live Verdict</div>
+      <div class="verdict-display">
+        <div class="verdict-ring">
+          <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="progress" id="progressRing" cx="50" cy="50" r="45"/></svg>
+          <div class="verdict-percent"><div class="verdict-number" id="verdictNum">—</div><div class="verdict-label-small">CONFIDENCE</div></div>
+        </div>
+        <div class="verdict-text" id="verdictText">AWAITING SCAN</div>
+        <div class="verdict-sub" id="verdictSub">Point camera at a face</div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Signal Metrics</div>
+      <div class="metric-row">
+        <div class="metric-item"><div class="metric-header"><span>AUTHENTICITY</span><span class="metric-val" id="mAuth">0%</span></div><div class="metric-bar"><div class="metric-fill" id="mAuthBar"></div></div></div>
+        <div class="metric-item"><div class="metric-header"><span>MANIPULATION RISK</span><span class="metric-val" id="mRisk">0%</span></div><div class="metric-bar"><div class="metric-fill" id="mRiskBar" style="background:var(--danger)"></div></div></div>
+        <div class="metric-item"><div class="metric-header"><span>DETECTION CONFIDENCE</span><span class="metric-val" id="mConf">0%</span></div><div class="metric-bar"><div class="metric-fill" id="mConfBar" style="background:var(--warn)"></div></div></div>
+        <div class="metric-item"><div class="metric-header"><span>AI GENERATION PROB</span><span class="metric-val" id="mAIGen">0%</span></div><div class="metric-bar"><div class="metric-fill" id="mAIGenBar" style="background:var(--accent2)"></div></div></div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">AI Improvement Suggestions</div>
+      <div class="suggestion-list" id="suggestionList"><div class="suggestion-empty">Run a scan to get AI suggestions</div></div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title" style="color:var(--danger)">Intruder Captures <span id="intruderCount" style="color:var(--muted);font-size:7px">(0)</span></div>
+      <div class="intruder-gallery" id="intruderGallery">
+        <div class="intruder-empty" id="intruderEmpty">No intruders captured yet</div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="export-btn" style="border-color:rgba(255,51,102,0.3);color:var(--danger)" onclick="downloadAllIntruders()">⬇ Download All</button>
+        <button class="export-btn" onclick="clearIntruders()">🗑 Clear</button>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Scan History</div>
+      <div id="historyLog" style="max-height:120px;overflow-y:auto"><div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);padding:8px 0">No scans yet</div></div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="export-btn" onclick="exportReport()">⬇ Export Report</button>
+        <button class="export-btn" onclick="clearHistory()">🗑 Clear</button>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Event Log</div>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- UPLOAD TAB -->
+<div class="tab-content" id="tab-upload">
+<div class="page" style="max-width:1100px">
+<div style="display:grid;grid-template-columns:1fr 390px;gap:20px">
+
+  <!-- LEFT: drop zone / preview -->
+  <div>
+    <!-- Drop zone -->
+    <div id="upDropZone">
+      <div id="upZone"
+        onclick="document.getElementById('upFileInput').click()"
+        ondragover="event.preventDefault();document.getElementById('upZone').style.borderColor='var(--accent)'"
+        ondragleave="document.getElementById('upZone').style.borderColor='var(--border2)'"
+        ondrop="event.preventDefault();document.getElementById('upZone').style.borderColor='var(--border2)';upLoadFile(event.dataTransfer.files[0])"
+        style="border:2px dashed var(--border2);border-radius:8px;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer;background:var(--panel);transition:all .2s;text-align:center;padding:40px 30px">
+        <div style="font-size:54px;opacity:.35">🖼️</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:5px;color:#fff">DROP IMAGE HERE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:2px">OR CLICK TO BROWSE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--border2);margin-top:2px">JPG · PNG · WEBP · GIF</div>
+        <div style="margin-top:14px;padding:9px 28px;border:1px solid var(--accent);border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:2px">SELECT FILE</div>
+      </div>
+      <input type="file" id="upFileInput" accept="image/*" style="display:none" onchange="upLoadFile(this.files[0])">
+    </div>
+
+    <!-- Preview (hidden until image loaded) -->
+    <div id="upPreviewZone" style="display:none">
+      <div style="position:relative;border-radius:6px;overflow:hidden;border:2px solid var(--border);transition:border-color .4s" id="upImgFrame">
+        <img id="upImg" style="width:100%;display:block;max-height:500px;object-fit:contain;background:#000" alt="uploaded">
+        <!-- Scanning overlay -->
+        <div id="upScanOv" style="display:none;position:absolute;inset:0;background:rgba(3,8,16,.92);flex-direction:column;align-items:center;justify-content:center;gap:16px">
+          <div style="width:44px;height:44px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite"></div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--accent);letter-spacing:3px">ANALYZING...</div>
+          <div id="upScanStep" style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:2px"></div>
+        </div>
+        <!-- Result badge -->
+        <div id="upBadge" style="display:none;position:absolute;top:12px;left:12px;padding:5px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;letter-spacing:2px;border-radius:2px"></div>
+        <!-- Risk bar -->
+        <div id="upRiskBar" style="display:none;position:absolute;bottom:0;left:0;right:0;height:5px"></div>
+      </div>
+
+      <!-- Meta info -->
+      <div style="display:flex;gap:16px;margin-top:10px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:4px;flex-wrap:wrap">
+        <div id="upMeta" style="display:flex;gap:16px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text);flex-wrap:wrap"></div>
+      </div>
+
+      <!-- Buttons -->
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button id="upAnalyzeBtn" onclick="upAnalyze()" disabled
+          style="flex:2;padding:13px 20px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;border:1px solid var(--accent);color:var(--accent);background:transparent;cursor:pointer;border-radius:2px;transition:all .2s">
+          ⊙ ANALYZE IMAGE
+        </button>
+        <button onclick="upClear()"
+          style="flex:1;padding:13px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;border:1px solid var(--muted);color:var(--muted);background:transparent;cursor:pointer;border-radius:2px">
+          ✕ CLEAR
+        </button>
+      </div>
+
+      <!-- Error box -->
+      <div id="upError" style="display:none;margin-top:10px;padding:12px 14px;background:rgba(255,51,102,.1);border:1px solid var(--danger);border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--danger);line-height:1.8"></div>
+      <div id="upRateHint" style="display:none;margin-top:8px;padding:10px 14px;background:rgba(255,184,0,.08);border:1px solid var(--warn);border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--warn);line-height:1.8">
+        💡 RATE LIMIT TIPS:<br>
+        • Wait 60 seconds then try again<br>
+        • Avoid analyzing multiple images in quick succession<br>
+        • The system will auto-retry up to 3 times with delays
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results panel (always visible) -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- Verdict card -->
+    <div class="panel-card" id="upVerdictCard" style="padding:0;overflow:hidden;border:1px solid var(--border)">
+      <div id="upVerdictTop" style="padding:22px 20px;text-align:center;background:rgba(0,0,0,.3);border-bottom:1px solid var(--border);transition:all .4s">
+        <div id="upVerdictIcon" style="font-size:44px;line-height:1;margin-bottom:10px">🔍</div>
+        <div id="upVerdictLabel" style="font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:5px;color:var(--muted);line-height:1">AWAITING IMAGE</div>
+        <div id="upVerdictSub" style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:2px;margin-top:6px">Upload an image to begin analysis</div>
+      </div>
+      <!-- Confidence bar -->
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:6px">
+          <span>CONFIDENCE</span><span id="upConfTxt" style="color:var(--text)">—</span>
+        </div>
+        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div id="upConfBar" style="height:100%;width:0%;background:var(--accent);border-radius:4px;transition:width 1s ease"></div>
+        </div>
+      </div>
+      <!-- Score bars -->
+      <div style="padding:14px 20px">
+        <div class="panel-title">Detection Scores</div>
+        <div id="upScores">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);text-align:center;padding:10px 0">Run analysis to see scores</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attributes -->
+    <div class="panel-card">
+      <div class="panel-title">Image Attributes</div>
+      <div id="upAttribs"><div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);text-align:center;padding:8px 0">—</div></div>
+    </div>
+
+    <!-- Red Flags -->
+    <div class="panel-card">
+      <div class="panel-title" style="color:var(--danger)">Red Flags</div>
+      <div id="upRedFlags"><div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted)">—</div></div>
+    </div>
+
+    <!-- AI Report -->
+    <div class="panel-card">
+      <div class="panel-title">AI Forensic Report</div>
+      <div id="upReport" style="font-size:10px;color:var(--muted);line-height:1.7">Upload and analyze an image to generate a full forensic report.</div>
+    </div>
+
+    <!-- Export -->
+    <button id="upExportBtn" onclick="upExport()" style="display:none;padding:12px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;border:1px solid var(--accent);color:var(--accent);background:transparent;cursor:pointer;border-radius:2px">
+      ⬇ EXPORT FULL REPORT
+    </button>
+  </div>
+
+</div>
+</div>
+</div>
+
+<!-- STATS TAB -->
+<div class="tab-content" id="tab-stats">
+<div class="page">
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-big" id="sTotalScans">0</div><div class="stat-lbl">TOTAL SCANS</div></div>
+    <div class="stat-card"><div class="stat-big red" id="sFakeCount">0</div><div class="stat-lbl">FAKES DETECTED</div></div>
+    <div class="stat-card"><div class="stat-big green" id="sRealCount">0</div><div class="stat-lbl">REAL VERIFIED</div></div>
+    <div class="stat-card"><div class="stat-big yellow" id="sUncertain">0</div><div class="stat-lbl">UNCERTAIN</div></div>
+    <div class="stat-card"><div class="stat-big" id="sAvgConf">—</div><div class="stat-lbl">AVG CONFIDENCE</div></div>
+    <div class="stat-card"><div class="stat-big" id="sMaxRisk">—</div><div class="stat-lbl">HIGHEST RISK SEEN</div></div>
+  </div>
+  <div class="panel-card">
+    <div class="panel-title">Detection Distribution</div>
+    <div id="statsChart"></div>
+  </div>
+  <div class="panel-card" style="margin-top:14px">
+    <div class="panel-title">Recent Scan Log</div>
+    <div id="statsHistory" style="max-height:280px;overflow-y:auto"></div>
+  </div>
+</div>
+</div>
+
+<!-- TIPS TAB -->
+<div class="tab-content" id="tab-tips">
+<div class="page">
+  <div class="cam-layout">
+    <div>
+      <div class="panel-card" style="margin-bottom:14px">
+        <div class="panel-title">How to Improve Detection Accuracy</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="suggestion-item"><div class="suggestion-icon">💡</div><div class="suggestion-text"><strong>Good lighting is critical.</strong> Make sure the face is well-lit from the front. Shadows create false positives in texture analysis.</div></div>
+          <div class="suggestion-item warn"><div class="suggestion-icon">📐</div><div class="suggestion-text"><strong>Face angle matters.</strong> Straight-on frontal views give the most accurate results. Avoid angles greater than 45° for live analysis.</div></div>
+          <div class="suggestion-item"><div class="suggestion-icon">🔍</div><div class="suggestion-text"><strong>Higher resolution = better accuracy.</strong> Use a 1080p webcam or upload high-quality images. Blurry or compressed frames reduce detection quality significantly.</div></div>
+          <div class="suggestion-item warn"><div class="suggestion-icon">⚡</div><div class="suggestion-text"><strong>Use Auto Mode strategically.</strong> Set the auto interval to 15–30s for continuous monitoring to avoid API rate limits while still catching changes.</div></div>
+          <div class="suggestion-item danger"><div class="suggestion-icon">🧪</div><div class="suggestion-text"><strong>Test with known deepfakes.</strong> Upload known deepfake images to calibrate sensitivity for your use case before relying on it in high-stakes situations.</div></div>
+          <div class="suggestion-item"><div class="suggestion-icon">🎯</div><div class="suggestion-text"><strong>Sensitivity tuning.</strong> Use sensitivity 4–5 for high-security environments. Use 2–3 for general monitoring to reduce false positives.</div></div>
+        </div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-title">What This System Detects</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="suggestion-item"><div class="suggestion-icon">🤖</div><div class="suggestion-text"><strong>GAN-generated faces</strong> — Fully AI-synthesized faces (StyleGAN, DALL-E, Midjourney, Stable Diffusion, etc.)</div></div>
+          <div class="suggestion-item"><div class="suggestion-icon">🔄</div><div class="suggestion-text"><strong>Face swaps</strong> — Real-time or post-processed face replacement using DeepFaceLab, FaceSwap, Reface, etc.</div></div>
+          <div class="suggestion-item warn"><div class="suggestion-icon">🎭</div><div class="suggestion-text"><strong>Face reenactment</strong> — Puppeteering techniques that animate a target face using another person's expressions.</div></div>
+          <div class="suggestion-item danger"><div class="suggestion-icon">⚠</div><div class="suggestion-text"><strong>Limitations:</strong> This system uses AI vision analysis and may produce false positives with unusual lighting, heavy makeup, or low-quality video. Always treat uncertain results as requiring human review.</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-card">
+        <div class="panel-title">AI-Personalized Session Tips</div>
+        <div id="aiImprovements"><div class="suggestion-empty">Complete some scans first, then generate personalized tips based on your session results.</div></div>
+        <button class="btn btn-primary" style="margin-top:12px;width:100%" id="genTipsBtn" onclick="generateImprovements()">✨ Generate Tips From My Session</button>
+      </div>
+      <div class="panel-card">
+        <div class="panel-title">Settings</div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="alertToggle" checked onchange="alertEnabled=this.checked" style="accent-color:var(--accent)">
+            ENABLE FAKE ALERT BANNER
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="soundToggle" checked onchange="soundEnabled=this.checked" style="accent-color:var(--accent)">
+            ENABLE SOUND ALERT ON FAKE DETECTED
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="mirrorToggle" checked onchange="toggleMirror(this.checked)" style="accent-color:var(--accent)">
+            MIRROR CAMERA (selfie mode)
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="blurGuardToggle" onchange="if(this.checked){enableBlurGuard()}else{disableBlurGuard()}" style="accent-color:var(--accent)">
+            BLUR GUARD — AUTO-BLUR EXTRA FACES IN FRAME
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+let stream=null, autoInterval=null, isAuto=false;
+let scanHistory=[], sessionStats={total:0,fake:0,real:0,uncertain:0,totalConf:0,maxRisk:0};
+let alertEnabled=true, soundEnabled=true, sensitivity=3;
+let uploadImageData=null;
+const video=document.getElementById('video'), canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
+
+// ---- BLUR GUARD SYSTEM ----
+let blurGuardActive = false;
+let blurAnimFrame = null;
+let faceDetector = null;
+let lastFaceCount = 0;
+let intruderScreenshots = [];
+let lastIntruderCapture = 0;
+let blurHoldUntil = 0;       // timestamp — keep blur ON until this time
+const BLUR_HOLD_MS = 5000;   // stay blurred for 5 seconds after intruder last seen
+const blurCanvas = document.getElementById('blurCanvas');
+const blurCtx = blurCanvas.getContext('2d');
+
+async function initFaceDetector() {
+  // Use FaceDetector API if available, otherwise use canvas-based skin detection fallback
+  if ('FaceDetector' in window) {
+    try {
+      faceDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 10 });
+      return true;
+    } catch(e) { faceDetector = null; }
+  }
+  return false;
+}
+
+function toggleBlurGuard() {
+  const statusEl = document.getElementById('blurGuardStatus');
+  const settingsToggle = document.getElementById('blurGuardToggle');
+  if (!blurGuardActive) {
+    enableBlurGuard();
+    if (settingsToggle) settingsToggle.checked = true;
+  } else {
+    disableBlurGuard();
+    if (settingsToggle) settingsToggle.checked = false;
+  }
+}
+
+async function enableBlurGuard() {
+  blurGuardActive = true;
+  document.getElementById('blurGuardStatus').textContent = 'ON';
+  document.getElementById('blurGuardStatus').style.color = 'var(--accent)';
+  document.getElementById('faceCountBadge').style.display = 'block';
+  log('Blur Guard activated — intruder faces will be blurred', 'safe');
+  await initFaceDetector();
+  runBlurLoop();
+}
+
+function disableBlurGuard() {
+  blurGuardActive = false;
+  if (blurAnimFrame) cancelAnimationFrame(blurAnimFrame);
+  blurAnimFrame = null;
+  blurCanvas.style.display = 'none';
+  blurCtx.clearRect(0, 0, blurCanvas.width, blurCanvas.height);
+  document.getElementById('blurGuardStatus').textContent = 'OFF';
+  document.getElementById('blurGuardStatus').style.color = 'var(--muted)';
+  document.getElementById('intruderBanner').style.display = 'none';
+  document.getElementById('faceCountBadge').style.display = 'none';
+  lastFaceCount = 0;
+  blurHoldUntil = 0;
+  log('Blur Guard deactivated', 'warn');
+}
+
+async function detectFaces() {
+  if (!stream || video.readyState < 2) return [];
+  // Use native FaceDetector API
+  if (faceDetector) {
+    try {
+      const faces = await faceDetector.detect(video);
+      return faces.map(f => ({
+        x: f.boundingBox.x, y: f.boundingBox.y,
+        w: f.boundingBox.width, h: f.boundingBox.height
+      }));
+    } catch(e) {}
+  }
+  // Fallback: use canvas pixel analysis to find skin-tone regions as face proxies
+  return detectFacesFallback();
+}
+
+function detectFacesFallback() {
+  // Draw video to a small temp canvas and scan for skin-tone clusters
+  const tw = 160, th = 90;
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = tw; tempCanvas.height = th;
+  const tempCtx = tempCanvas.getContext('2d');
+  tempCtx.drawImage(video, 0, 0, tw, th);
+  const imageData = tempCtx.getImageData(0, 0, tw, th);
+  const data = imageData.data;
+
+  // Build a skin mask grid (8x8 blocks)
+  const blockSize = 8;
+  const cols = Math.floor(tw / blockSize), rows = Math.floor(th / blockSize);
+  const skinMap = [];
+
+  for (let r = 0; r < rows; r++) {
+    skinMap[r] = [];
+    for (let c = 0; c < cols; c++) {
+      let skinPixels = 0, total = 0;
+      for (let py = r*blockSize; py < (r+1)*blockSize && py < th; py++) {
+        for (let px = c*blockSize; px < (c+1)*blockSize && px < tw; px++) {
+          const i = (py * tw + px) * 4;
+          const R = data[i], G = data[i+1], B = data[i+2];
+          if (isSkinTone(R, G, B)) skinPixels++;
+          total++;
+        }
+      }
+      skinMap[r][c] = skinPixels / total > 0.4 ? 1 : 0;
+    }
+  }
+
+  // Find connected skin regions using simple flood-fill
+  const visited = Array.from({length: rows}, () => new Array(cols).fill(false));
+  const regions = [];
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (skinMap[r][c] && !visited[r][c]) {
+        const region = floodFill(skinMap, visited, r, c, rows, cols);
+        if (region.size > 4) regions.push(region);
+      }
+    }
+  }
+
+  // Convert regions to bounding boxes in video coordinates
+  const scaleX = video.videoWidth / tw || 1, scaleY = video.videoHeight / th || 1;
+  return regions.map(reg => ({
+    x: reg.minC * blockSize * scaleX,
+    y: reg.minR * blockSize * scaleY,
+    w: (reg.maxC - reg.minC + 1) * blockSize * scaleX,
+    h: (reg.maxR - reg.minR + 1) * blockSize * scaleY
+  })).filter(b => {
+    // Filter: face-shaped aspect ratio (taller than wide or squarish)
+    const ar = b.w / b.h;
+    return ar > 0.3 && ar < 1.8 && b.w > 30 && b.h > 30;
+  });
+}
+
+function isSkinTone(r, g, b) {
+  // RGB skin tone heuristic (works for diverse skin tones)
+  return (
+    r > 60 && g > 40 && b > 20 &&
+    r > g && r > b &&
+    Math.abs(r - g) > 15 &&
+    r - b > 10 &&
+    r < 250 &&
+    // YCbCr-like check
+    (0.299*r + 0.587*g + 0.114*b) > 80
+  );
+}
+
+function floodFill(map, visited, startR, startC, rows, cols) {
+  const stack = [[startR, startC]];
+  const region = { cells: [], minR: startR, maxR: startR, minC: startC, maxC: startC, size: 0 };
+  while (stack.length) {
+    const [r, c] = stack.pop();
+    if (r < 0 || r >= rows || c < 0 || c >= cols || visited[r][c] || !map[r][c]) continue;
+    visited[r][c] = true;
+    region.cells.push([r, c]);
+    region.size++;
+    region.minR = Math.min(region.minR, r); region.maxR = Math.max(region.maxR, r);
+    region.minC = Math.min(region.minC, c); region.maxC = Math.max(region.maxC, c);
+    stack.push([r+1,c],[r-1,c],[r,c+1],[r,c-1]);
+  }
+  return region;
+}
+
+// Find the "primary" face — largest one or most centered
+function findPrimaryFace(faces, vw, vh) {
+  if (!faces.length) return null;
+  const cx = vw / 2, cy = vh / 2;
+  // Score = area - distance from center penalty
+  return faces.reduce((best, f) => {
+    const faceCx = f.x + f.w/2, faceCy = f.y + f.h/2;
+    const dist = Math.sqrt((faceCx-cx)**2 + (faceCy-cy)**2);
+    const score = f.w * f.h - dist * 0.5;
+    const bestCx = best.x + best.w/2, bestCy = best.y + best.h/2;
+    const bestDist = Math.sqrt((bestCx-cx)**2 + (bestCy-cy)**2);
+    const bestScore = best.w * best.h - bestDist * 0.5;
+    return score > bestScore ? f : best;
+  });
+}
+
+function applyFullScreenBlur(vw, vh, intruderCount, secsLeft = 0) {
+  if (!blurCanvas || !video || video.readyState < 2) return;
+
+  blurCanvas.width  = window.innerWidth;
+  blurCanvas.height = window.innerHeight;
+  blurCanvas.style.display = 'block';
+
+  const bw = blurCanvas.width, bh = blurCanvas.height;
+
+  // Pixelate entire video frame across full screen
+  const pixelSize = 14;
+  const tmpW = Math.max(1, Math.floor(bw / pixelSize));
+  const tmpH = Math.max(1, Math.floor(bh / pixelSize));
+  const tmp = document.createElement('canvas');
+  tmp.width = tmpW; tmp.height = tmpH;
+  const tmpCtx = tmp.getContext('2d');
+  tmpCtx.drawImage(video, 0, 0, tmpW, tmpH);
+
+  blurCtx.imageSmoothingEnabled = false;
+  blurCtx.drawImage(tmp, 0, 0, bw, bh);
+  blurCtx.imageSmoothingEnabled = true;
+
+  // Dark tint
+  blurCtx.fillStyle = secsLeft > 0 ? 'rgba(8,4,0,0.60)' : 'rgba(10,0,4,0.65)';
+  blurCtx.fillRect(0, 0, bw, bh);
+
+  // Diagonal stripes
+  blurCtx.save();
+  blurCtx.strokeStyle = 'rgba(255,51,102,0.08)';
+  blurCtx.lineWidth = 1;
+  for (let i = -bh; i < bw + bh; i += 18) {
+    blurCtx.beginPath(); blurCtx.moveTo(i, 0); blurCtx.lineTo(i + bh, bh); blurCtx.stroke();
+  }
+  blurCtx.restore();
+
+  // Border
+  blurCtx.strokeStyle = secsLeft > 0 ? 'rgba(255,184,0,0.8)' : 'rgba(255,51,102,0.9)';
+  blurCtx.lineWidth = 5;
+  blurCtx.strokeRect(3, 3, bw - 6, bh - 6);
+
+  const cx = bw / 2, cy = bh / 2;
+
+  if (secsLeft > 0) {
+    // ---- COUNTDOWN MODE (intruder left but hold timer still running) ----
+    blurCtx.beginPath();
+    blurCtx.arc(cx, cy - 55, 38, 0, Math.PI * 2);
+    blurCtx.fillStyle = 'rgba(255,184,0,0.15)';
+    blurCtx.fill();
+    blurCtx.strokeStyle = 'rgba(255,184,0,0.85)';
+    blurCtx.lineWidth = 2;
+    blurCtx.stroke();
+
+    blurCtx.fillStyle = '#ffb800';
+    blurCtx.font = 'bold 38px Share Tech Mono, monospace';
+    blurCtx.textAlign = 'center';
+    blurCtx.textBaseline = 'middle';
+    blurCtx.fillText(secsLeft, cx, cy - 55);
+
+    blurCtx.fillStyle = '#ffffff';
+    blurCtx.font = 'bold 22px Share Tech Mono, monospace';
+    blurCtx.fillText('VERIFYING AREA CLEAR', cx, cy + 8);
+
+    blurCtx.fillStyle = 'rgba(255,220,100,0.85)';
+    blurCtx.font = '12px Share Tech Mono, monospace';
+    blurCtx.fillText('SCREEN UNLOCKS WHEN TIMER REACHES ZERO', cx, cy + 40);
+
+    blurCtx.fillStyle = 'rgba(255,180,50,0.5)';
+    blurCtx.font = '9px Share Tech Mono, monospace';
+    blurCtx.fillText(new Date().toLocaleTimeString(), cx, cy + 62);
+  } else {
+    // ---- ACTIVE INTRUDER MODE ----
+    blurCtx.beginPath();
+    blurCtx.arc(cx, cy - 60, 36, 0, Math.PI * 2);
+    blurCtx.fillStyle = 'rgba(255,51,102,0.22)';
+    blurCtx.fill();
+    blurCtx.strokeStyle = 'rgba(255,51,102,0.9)';
+    blurCtx.lineWidth = 2;
+    blurCtx.stroke();
+
+    blurCtx.fillStyle = '#ff3366';
+    blurCtx.font = 'bold 34px sans-serif';
+    blurCtx.textAlign = 'center';
+    blurCtx.textBaseline = 'middle';
+    blurCtx.fillText('⚠', cx, cy - 60);
+
+    blurCtx.fillStyle = '#ffffff';
+    blurCtx.font = 'bold 26px Share Tech Mono, monospace';
+    blurCtx.fillText('INTRUDER DETECTED', cx, cy + 4);
+
+    blurCtx.fillStyle = 'rgba(255,180,180,0.88)';
+    blurCtx.font = '13px Share Tech Mono, monospace';
+    blurCtx.fillText(
+      `${intruderCount} UNAUTHORIZED FACE${intruderCount > 1 ? 'S' : ''} IN FRAME — FEED LOCKED`,
+      cx, cy + 38
+    );
+
+    blurCtx.fillStyle = 'rgba(255,100,100,0.65)';
+    blurCtx.font = '10px Share Tech Mono, monospace';
+    blurCtx.fillText('SCREEN WILL UNLOCK WHEN INTRUDER LEAVES', cx, cy + 62);
+
+    blurCtx.fillStyle = 'rgba(255,80,80,0.5)';
+    blurCtx.font = '9px Share Tech Mono, monospace';
+    blurCtx.fillText(new Date().toLocaleTimeString(), cx, cy + 82);
+  }
+
+  blurCtx.textAlign = 'left';
+  blurCtx.textBaseline = 'alphabetic';
+}
+
+async function captureIntruderScreenshot(intruderCount) {
+  const now = Date.now();
+  if (now - lastIntruderCapture < 3000) return; // max 1 capture per 3s
+  lastIntruderCapture = now;
+
+  const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+
+  // 1. Capture the RAW frame BEFORE blur is visible (full quality evidence)
+  const snapCanvas = document.createElement('canvas');
+  snapCanvas.width = vw; snapCanvas.height = vh;
+  const snapCtx = snapCanvas.getContext('2d');
+  snapCtx.drawImage(video, 0, 0, vw, vh);
+
+  // 2. Add evidence watermark on the raw capture
+  const ts = new Date().toLocaleString();
+  snapCtx.fillStyle = 'rgba(255,51,102,0.92)';
+  snapCtx.fillRect(0, 0, vw, 28);
+  snapCtx.fillStyle = '#fff';
+  snapCtx.font = 'bold 13px Share Tech Mono, monospace';
+  snapCtx.fillText(`⚠ INTRUDER DETECTED — DeepScan Security  |  ${ts}  |  ${intruderCount} face(s)`, 10, 19);
+
+  // Bottom bar
+  snapCtx.fillStyle = 'rgba(3,8,16,0.75)';
+  snapCtx.fillRect(0, vh - 22, vw, 22);
+  snapCtx.fillStyle = 'rgba(255,51,102,0.8)';
+  snapCtx.font = '10px Share Tech Mono, monospace';
+  snapCtx.fillText('EVIDENCE CAPTURE — AUTO-SAVED BY BLUR GUARD', 10, vh - 7);
+
+  const dataURL = snapCanvas.toDataURL('image/jpeg', 0.92);
+
+  // 3. Flash effect on camera
+  const flashEl = document.getElementById('intruderFlash');
+  flashEl.style.display = 'block';
+  flashEl.style.animation = 'none';
+  flashEl.offsetHeight; // reflow
+  flashEl.style.animation = 'flashAnim 0.4s ease forwards';
+  setTimeout(() => { flashEl.style.display = 'none'; }, 450);
+
+  // 4. Store in array
+  const entry = {
+    id: now,
+    dataURL,
+    time: new Date().toLocaleTimeString(),
+    date: ts,
+    count: intruderCount
+  };
+  intruderScreenshots.unshift(entry);
+  if (intruderScreenshots.length > 20) intruderScreenshots.pop();
+
+  // 5. Update gallery
+  renderIntruderGallery();
+  log(`📸 Intruder screenshot captured (${intruderCount} face${intruderCount>1?'s':''})`, 'danger');
+}
+
+function renderIntruderGallery() {
+  const gallery = document.getElementById('intruderGallery');
+  const empty = document.getElementById('intruderEmpty');
+  const countEl = document.getElementById('intruderCount');
+  countEl.textContent = `(${intruderScreenshots.length})`;
+
+  if (!intruderScreenshots.length) {
+    gallery.innerHTML = '<div class="intruder-empty" id="intruderEmpty">No intruders captured yet</div>';
+    return;
+  }
+  gallery.innerHTML = intruderScreenshots.map((s, i) => `
+    <div class="intruder-thumb-row" onclick="openLightbox(${i})">
+      <img class="intruder-thumb" src="${s.dataURL}" alt="Intruder ${i+1}">
+      <div class="intruder-thumb-info">
+        <div class="intruder-thumb-time">⚠ ${s.time} — ${s.count} INTRUDER${s.count>1?'S':''}</div>
+        <div class="intruder-thumb-desc">Click to view full image</div>
+      </div>
+      <button class="intruder-thumb-dl" onclick="downloadIntruder(event,${i})">⬇</button>
+    </div>
+  `).join('');
+}
+
+function openLightbox(idx) {
+  const s = intruderScreenshots[idx];
+  if (!s) return;
+  document.getElementById('lightboxImg').src = s.dataURL;
+  document.getElementById('lightboxImg').dataset.idx = idx;
+  document.getElementById('lightboxMeta').textContent = `⚠ INTRUDER CAPTURE — ${s.date} — ${s.count} FACE${s.count>1?'S':''}`;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
+
+function downloadLightbox(e) {
+  e.stopPropagation();
+  const idx = parseInt(document.getElementById('lightboxImg').dataset.idx);
+  downloadIntruder(e, idx);
+}
+
+function downloadIntruder(e, idx) {
+  e.stopPropagation();
+  const s = intruderScreenshots[idx];
+  if (!s) return;
+  const a = document.createElement('a');
+  a.href = s.dataURL;
+  a.download = `intruder-capture-${s.id}.jpg`;
+  a.click();
+  log(`Screenshot ${idx+1} downloaded`, 'safe');
+}
+
+function downloadAllIntruders() {
+  if (!intruderScreenshots.length) { alert('No intruder captures yet.'); return; }
+  intruderScreenshots.forEach((s, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = s.dataURL; a.download = `intruder-capture-${s.id}.jpg`; a.click();
+    }, i * 400);
+  });
+  log(`Downloading ${intruderScreenshots.length} intruder captures`, 'safe');
+}
+
+function clearIntruders() {
+  intruderScreenshots = [];
+  renderIntruderGallery();
+  log('Intruder captures cleared', 'warn');
+}
+
+async function runBlurLoop() {
+  if (!blurGuardActive || !stream) return;
+
+  const faces = await detectFaces();
+  const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+  const primary = findPrimaryFace(faces, vw, vh);
+  const intruderCount = faces.length > 1 ? faces.length - 1 : 0;
+  const now = Date.now();
+
+  // Update face count badge
+  const badge = document.getElementById('faceCountBadge');
+  const banner = document.getElementById('intruderBanner');
+  if (faces.length > 0) {
+    badge.style.display = 'block';
+    badge.textContent = faces.length === 1 ? '👤 1 FACE' : `👥 ${faces.length} FACES`;
+    badge.className = 'face-count-badge ' + (faces.length > 1 ? 'multi' : 'single');
+  }
+
+  if (intruderCount > 0) {
+    // Extend hold timer every frame an intruder is seen
+    blurHoldUntil = now + BLUR_HOLD_MS;
+
+    const isNewIntruder = lastFaceCount <= 1 && faces.length > 1;
+    if (isNewIntruder) captureIntruderScreenshot(intruderCount);
+
+    applyFullScreenBlur(vw, vh, intruderCount);
+    banner.style.display = 'none';
+
+    if (lastFaceCount !== faces.length) {
+      log(`Blur Guard: ${intruderCount} intruder face(s) — screen locked for ${BLUR_HOLD_MS/1000}s`, 'danger');
+      if (soundEnabled) playBeep();
+    }
+  } else if (now < blurHoldUntil) {
+    // Intruder gone but hold timer still active — keep blur on with countdown
+    const secsLeft = Math.ceil((blurHoldUntil - now) / 1000);
+    applyFullScreenBlur(vw, vh, 0, secsLeft);
+    banner.style.display = 'none';
+  } else {
+    // Hold expired — unlock screen
+    if (blurCanvas.style.display !== 'none') {
+      blurCanvas.style.display = 'none';
+      blurCtx.clearRect(0, 0, blurCanvas.width, blurCanvas.height);
+      if (lastFaceCount > 1 || blurHoldUntil > 0) log('Blur Guard: intruder cleared — screen unlocked', 'safe');
+      blurHoldUntil = 0;
+    }
+    banner.style.display = 'none';
+  }
+
+  lastFaceCount = faces.length;
+  blurAnimFrame = requestAnimationFrame(runBlurLoop);
+}
+// ---- END BLUR GUARD ----
+
+
+function switchTab(id,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+  if(id==='stats') renderStats();
+}
+
+function log(msg,type=''){
+  const logArea=document.getElementById('logArea');
+  const time=new Date().toTimeString().split(' ')[0];
+  const entry=document.createElement('div');
+  entry.className='log-entry';
+  entry.innerHTML=`<span class="log-time">${time}</span><span class="log-msg ${type}">${msg}</span>`;
+  logArea.insertBefore(entry,logArea.firstChild);
+  if(logArea.children.length>80) logArea.removeChild(logArea.lastChild);
+}
+
+async function startCamera(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:'user'},audio:false});
+    video.srcObject=stream;
+    toggleMirror(document.getElementById('mirrorToggle').checked);
+    document.getElementById('placeholder').style.display='none';
+    document.getElementById('startBtn').disabled=true;
+    ['analyzeBtn','autoBtn','screenshotBtn','stopBtn'].forEach(id=>document.getElementById(id).disabled=false);
+    document.getElementById('scanLine').style.display='block';
+    document.getElementById('cameraWrapper').classList.add('scanning');
+    document.getElementById('systemStatus').textContent='CAMERA ACTIVE';
+    log('Camera initialized','safe');
+    if(blurGuardActive) runBlurLoop();
+  }catch(err){
+    log('Camera error: '+err.message,'danger');
+    alert('Camera access required. Please allow camera permissions and try again.');
+  }
+}
+
+function stopCamera(){
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  if(isAuto) toggleAuto();
+  video.srcObject=null;
+  document.getElementById('placeholder').style.display='flex';
+  document.getElementById('startBtn').disabled=false;
+  ['analyzeBtn','autoBtn','screenshotBtn','stopBtn'].forEach(id=>document.getElementById(id).disabled=true);
+  document.getElementById('cameraWrapper').className='camera-wrapper';
+  document.getElementById('scanLine').style.display='none';
+  document.getElementById('faceBox').style.display='none';
+  document.getElementById('systemStatus').textContent='READY';
+  if(blurGuardActive) disableBlurGuard();
+  log('Camera stopped','warn');
+}
+
+function toggleAuto(){
+  isAuto=!isAuto;
+  const btn=document.getElementById('autoBtn');
+  if(isAuto){
+    const ms=parseInt(document.getElementById('intervalSelect').value);
+    btn.textContent='⟳ AUTO: ON';
+    btn.style.cssText='border-color:var(--accent);color:var(--accent)';
+    autoInterval=setInterval(analyzeFrame,ms);
+    log(`Auto-scan ON (${ms/1000}s)`,'safe');
+    analyzeFrame();
+  }else{
+    btn.textContent='⟳ AUTO';
+    btn.style.cssText='';
+    clearInterval(autoInterval);
+    log('Auto-scan OFF','warn');
+  }
+}
+
+function updateSensitivity(v){sensitivity=parseInt(v);document.getElementById('sensitivityVal').textContent=v;log(`Sensitivity: ${v}`);}
+function toggleMirror(on){video.style.transform=on?'scaleX(-1)':'scaleX(1)';}
+
+async function saveScreenshot(){
+  canvas.width=video.videoWidth||640;canvas.height=video.videoHeight||480;ctx.drawImage(video,0,0);
+  const link=document.createElement('a');link.download='deepscan-'+Date.now()+'.jpg';link.href=canvas.toDataURL('image/jpeg',0.9);link.click();
+  log('Screenshot saved','safe');
+}
+
+async function captureFrame(){
+  canvas.width=video.videoWidth||640;canvas.height=video.videoHeight||480;ctx.drawImage(video,0,0);
+  return canvas.toDataURL('image/jpeg',0.8).split(',')[1];
+}
+
+function buildPrompt(){
+  const labels=['very strict','strict','balanced','lenient','very lenient'];
+  return `You are an advanced deepfake detection AI with ${labels[sensitivity-1]} sensitivity. Analyze this image for ANY signs of digital manipulation, AI generation, face-swapping, GAN artifacts, or deepfake technology.
+
+Respond ONLY with a valid JSON object, no markdown, no extra text:
+{"verdict":"REAL|FAKE|UNCERTAIN","confidence":0-100,"authenticity_score":0-100,"manipulation_risk":0-100,"ai_generation_probability":0-100,"facial_coherence":"HIGH|MEDIUM|LOW|N/A","texture_artifacts":"NONE|MINOR|SIGNIFICANT","blink_pattern":"NATURAL|UNNATURAL|INDETERMINATE","edge_consistency":"CONSISTENT|INCONSISTENT|INDETERMINATE","skin_uniformity":"NATURAL|SUSPICIOUS|INDETERMINATE","lighting_match":"CONSISTENT|INCONSISTENT|INDETERMINATE","summary":"one sentence finding","suggestions":["up to 3 analyst improvement tips"],"red_flags":["suspicious features or empty"]}
+
+If no face: verdict UNCERTAIN, confidence 0.`;
+}
+
+async function callAPI(imageB64){
+  let res, data;
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    if (attempt > 0) {
+      // Show live countdown in the UI
+      const waitSecs = attempt * 15;
+      log(`Rate limited (429) — waiting ${waitSecs}s before retry ${attempt}/3...`, 'warn');
+      const txt = document.getElementById('analyzingText');
+      for (let s = waitSecs; s > 0; s--) {
+        if (txt) txt.textContent = `RATE LIMITED — RETRYING IN ${s}s...`;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      if (txt) txt.textContent = 'RETRYING...';
+    }
+    try {
+      res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:[
+          {type:"image",source:{type:"base64",media_type:"image/jpeg",data:imageB64}},
+          {type:"text",text:buildPrompt()}
+        ]}]})
+      });
+    } catch(e){ throw new Error('Network error: '+e.message); }
+    if (res.status === 429) {
+      if (attempt < 3) continue;
+      throw new Error('Rate limit exceeded after 3 retries. Please wait 1-2 minutes before scanning again.');
+    }
+    if(!res.ok){ const t=await res.text().catch(()=>''); throw new Error(`API ${res.status}: ${t.slice(0,100)}`); }
+    data = await res.json();
+    if(data.error) throw new Error('API: '+(data.error.message||'unknown'));
+    const raw=(data.content||[]).map(b=>b.text||'').join('').trim();
+    const clean=raw.replace(/```json|```/g,'').trim();
+    try{ return JSON.parse(clean); }
+    catch(e){ const m=clean.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('Parse error'); }
+  }
+}
+
+async function analyzeFrame(){
+  if(!stream) return;
+  document.getElementById('analyzeBtn').disabled=true;
+  document.getElementById('analyzingOverlay').classList.add('active');
+  document.getElementById('analyzingText').textContent='CAPTURING...';
+  const imageData=await captureFrame();
+  document.getElementById('analyzingText').textContent='AI PROCESSING...';
+  try{const result=await callAPI(imageData);displayResult(result,'');}
+  catch(err){log('Error: '+err.message,'danger');console.error(err);}
+  finally{document.getElementById('analyzingOverlay').classList.remove('active');document.getElementById('analyzeBtn').disabled=false;}
+}
+
+function displayResult(r,prefix){
+  const verdict=r.verdict||'UNCERTAIN', conf=r.confidence||0, auth=r.authenticity_score||0, risk=r.manipulation_risk||0, aiGen=r.ai_generation_probability||0;
+  const ring=document.getElementById(prefix+'progressRing');
+  ring.style.strokeDashoffset=283-(conf/100)*283;
+  let col=verdict==='REAL'?'var(--safe)':verdict==='FAKE'?'var(--danger)':'var(--warn)';
+  ring.style.stroke=col;
+  document.getElementById(prefix+'verdictNum').textContent=conf+'%';
+  document.getElementById(prefix+'verdictNum').style.color=col;
+  document.getElementById(prefix+'verdictText').textContent=verdict;
+  document.getElementById(prefix+'verdictText').style.color=col;
+  document.getElementById(prefix+'verdictSub').textContent=r.summary||'';
+  document.getElementById(prefix+'verdictSub').style.color=verdict==='FAKE'?'var(--danger)':'var(--muted)';
+
+  if(prefix===''){
+    // metrics
+    setM('mAuth',auth,'mAuthBar','var(--accent)');setM('mRisk',risk,'mRiskBar','var(--danger)');
+    setM('mConf',conf,'mConfBar','var(--warn)');setM('mAIGen',aiGen,'mAIGenBar','var(--accent2)');
+    // breakdown
+    setBD('bFacial',r.facial_coherence,{HIGH:'safe',MEDIUM:'warn',LOW:'danger'});
+    setBD('bTexture',r.texture_artifacts,{NONE:'safe',MINOR:'warn',SIGNIFICANT:'danger'});
+    setBD('bBlink',r.blink_pattern,{NATURAL:'safe',INDETERMINATE:'warn',UNNATURAL:'danger'});
+    setBD('bEdge',r.edge_consistency,{CONSISTENT:'safe',INDETERMINATE:'warn',INCONSISTENT:'danger'});
+    setBD('bSkin',r.skin_uniformity,{NATURAL:'safe',INDETERMINATE:'warn',SUSPICIOUS:'danger'});
+    setBD('bLight',r.lighting_match,{CONSISTENT:'safe',INDETERMINATE:'warn',INCONSISTENT:'danger'});
+    // threat
+    document.getElementById('threatIndicator').style.left=Math.min(risk,97)+'%';
+    // wrapper
+    const w=document.getElementById('cameraWrapper');
+    w.className='camera-wrapper scanning';
+    if(verdict==='FAKE') w.classList.add('fake-detected');
+    if(verdict==='UNCERTAIN') w.classList.add('uncertain-state');
+    // face box
+    const fb=document.getElementById('faceBox'),fl=document.getElementById('faceLabel');
+    if(conf>10){
+      fb.style.cssText='display:block;top:18%;left:28%;width:44%;height:58%';
+      fb.className='face-box'+(verdict==='FAKE'?' fake':verdict==='UNCERTAIN'?' uncertain':'');
+      fl.textContent=verdict+' '+conf+'%';
+      fl.className='face-label'+(verdict==='FAKE'?' fake':verdict==='UNCERTAIN'?' uncertain':'');
+    }else{fb.style.display='none';}
+    // alert
+    if(verdict==='FAKE'&&conf>=70&&alertEnabled){
+      document.getElementById('alertBanner').style.display='block';
+      if(soundEnabled) playBeep();
+      setTimeout(()=>document.getElementById('alertBanner').style.display='none',4000);
+    }
+    // suggestions
+    renderSuggestions(r,'suggestionList');
+    // stats
+    sessionStats.total++;sessionStats.totalConf+=conf;
+    if(verdict==='FAKE') sessionStats.fake++;
+    else if(verdict==='REAL') sessionStats.real++;
+    else sessionStats.uncertain++;
+    if(risk>sessionStats.maxRisk) sessionStats.maxRisk=risk;
+    updateHeaderStats();
+    const entry={verdict,conf,risk,time:new Date().toLocaleTimeString(),summary:r.summary||''};
+    scanHistory.unshift(entry);if(scanHistory.length>20) scanHistory.pop();
+    renderHistory();
+  }
+  const lt=verdict==='FAKE'?'danger':verdict==='REAL'?'safe':'warn';
+  log(`[${verdict}] ${conf}% conf | risk ${risk}% — ${r.summary||''}`,lt);
+}
+
+function setM(valId,val,barId,color){document.getElementById(valId).textContent=val+'%';const b=document.getElementById(barId);b.style.width=val+'%';b.style.background=color;}
+function setBD(id,val,map){
+  const el=document.getElementById(id);if(!el)return;el.textContent=val||'—';
+  const k=map[val];const colors={safe:'var(--safe)',warn:'var(--warn)',danger:'var(--danger)'};
+  el.style.color=colors[k]||'var(--text)';
+}
+
+function renderSuggestions(r,cId){
+  const c=document.getElementById(cId);const items=[];
+  (r.suggestions||[]).forEach((s,i)=>items.push(`<div class="suggestion-item ${i>0?'warn':''}"><div class="suggestion-icon">💡</div><div class="suggestion-text">${s}</div></div>`));
+  (r.red_flags||[]).filter(f=>f&&f.length>2).forEach(f=>items.push(`<div class="suggestion-item danger"><div class="suggestion-icon">🚨</div><div class="suggestion-text"><strong>Red flag:</strong> ${f}</div></div>`));
+  c.innerHTML=items.length?items.join(''):'<div class="suggestion-empty">No specific suggestions for this scan</div>';
+}
+
+function renderHistory(){
+  const c=document.getElementById('historyLog');
+  c.innerHTML=scanHistory.map(h=>{const cls=h.verdict==='REAL'?'real':h.verdict==='FAKE'?'fake':'uncertain';return`<div class="history-row"><span class="history-badge ${cls}">${h.verdict}</span><span class="history-time">${h.time}</span><span class="history-conf">${h.conf}%</span></div>`;}).join('');
+}
+
+function updateHeaderStats(){
+  document.getElementById('hTotalScans').textContent=sessionStats.total;
+  document.getElementById('hFakeCount').textContent=sessionStats.fake;
+  document.getElementById('hRealCount').textContent=sessionStats.real;
+  const avg=sessionStats.total?Math.round(sessionStats.totalConf/sessionStats.total):0;
+  document.getElementById('hAvgConf').textContent=sessionStats.total?avg+'%':'—';
+}
+
+function renderStats(){
+  const s=sessionStats;
+  document.getElementById('sTotalScans').textContent=s.total;
+  document.getElementById('sFakeCount').textContent=s.fake;
+  document.getElementById('sRealCount').textContent=s.real;
+  document.getElementById('sUncertain').textContent=s.uncertain;
+  document.getElementById('sAvgConf').textContent=s.total?Math.round(s.totalConf/s.total)+'%':'—';
+  document.getElementById('sMaxRisk').textContent=s.maxRisk?s.maxRisk+'%':'—';
+  const t=s.total||1;
+  document.getElementById('statsChart').innerHTML=
+    `<div class="chart-bar-row"><div class="chart-bar-label">REAL</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${s.real/t*100}%;background:var(--accent)"></div></div><div class="chart-bar-val">${s.real}</div></div>`+
+    `<div class="chart-bar-row"><div class="chart-bar-label">FAKE</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${s.fake/t*100}%;background:var(--danger)"></div></div><div class="chart-bar-val">${s.fake}</div></div>`+
+    `<div class="chart-bar-row"><div class="chart-bar-label">UNCERTAIN</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${s.uncertain/t*100}%;background:var(--warn)"></div></div><div class="chart-bar-val">${s.uncertain}</div></div>`;
+  document.getElementById('statsHistory').innerHTML=scanHistory.map(h=>{const cls=h.verdict==='REAL'?'real':h.verdict==='FAKE'?'fake':'uncertain';return`<div class="history-row" style="padding:7px 0"><span class="history-badge ${cls}">${h.verdict}</span><span class="history-time">${h.time}</span><span class="history-conf">${h.conf}%</span><span style="font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);flex:2;padding-left:10px">${h.summary}</span></div>`;}).join('')||'<div style="font-family:Share Tech Mono,monospace;font-size:8px;color:var(--muted);padding:12px 0">No scan data yet</div>';
+}
+
+// Upload
+function handleDragOver(e){e.preventDefault();document.getElementById('uploadZone').classList.add('dragover');}
+function handleDrop(e){e.preventDefault();document.getElementById('uploadZone').classList.remove('dragover');if(e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);}
+function handleFileUpload(e){if(e.target.files[0]) processFile(e.target.files[0]);}
+
+let currentUploadResult = null;
+
+let uploadMediaType = 'image/jpeg';
+
+function processFile(file){
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      // Cap at 1024px max dimension
+      const MAX = 1024;
+      let w = img.width, h = img.height;
+      if(w > MAX){ h = Math.round(h * MAX / w); w = MAX; }
+      if(h > MAX){ w = Math.round(w * MAX / h); h = MAX; }
+
+      const tmpC = document.createElement('canvas');
+      tmpC.width = w; tmpC.height = h;
+      tmpC.getContext('2d').drawImage(img, 0, 0, w, h);
+
+      const compressed = tmpC.toDataURL('image/jpeg', 0.85);
+      uploadImageData = compressed.split(',')[1];
+      uploadMediaType = 'image/jpeg';
+
+      // Switch states
+      document.getElementById('uploadDropState').style.display = 'none';
+      document.getElementById('uploadPreviewState').style.display = 'block';
+
+      // Set image
+      document.getElementById('uploadedPreview').src = compressed;
+      document.getElementById('uploadImgFrame').style.borderColor = 'var(--border)';
+      document.getElementById('uploadImgBadge').style.display = 'none';
+      document.getElementById('uploadRiskBar').style.display = 'none';
+
+      // Metadata pills
+      const kb = Math.round(uploadImageData.length * 0.75 / 1024);
+      document.getElementById('imgMeta').innerHTML =
+        `<span><span style="color:var(--accent)">FILE</span> ${file.name.length>22?file.name.slice(0,20)+'…':file.name}</span>` +
+        `<span><span style="color:var(--accent)">SIZE</span> ${kb < 1024 ? kb+'KB' : (kb/1024).toFixed(1)+'MB'}</span>` +
+        `<span><span style="color:var(--accent)">DIMS</span> ${w}×${h}px</span>` +
+        `<span><span style="color:var(--accent)">RATIO</span> ${(w/h).toFixed(2)}:1</span>`;
+
+      document.getElementById('uploadAnalyzeBtn').disabled = false;
+      log(`Image loaded: ${file.name} (${kb}KB, ${w}×${h})`,'safe');
+    };
+    img.onerror = () => log('Failed to load image file','danger');
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function analyzeUpload(){
+  if(!uploadImageData) return;
+  document.getElementById('uploadAnalyzeBtn').disabled=true;
+
+  // Show scan overlay on preview
+  const scanOv = document.getElementById('uploadScanOverlay');
+  scanOv.style.display='flex';
+
+  const steps = [
+    ['READING PIXEL DATA...', 200],
+    ['DETECTING FACES...', 800],
+    ['ANALYZING TEXTURE & ARTIFACTS...', 1400],
+    ['CHECKING GAN SIGNATURES...', 900],
+    ['RUNNING DEEPFAKE MODELS...', 700],
+    ['GENERATING REPORT...', 500],
+  ];
+
+  let stepIdx = 0;
+  const stepEl = document.getElementById('uploadScanStep');
+  const txtEl = document.getElementById('uploadScanText');
+  const runSteps = async () => {
+    for(const [label, delay] of steps){
+      stepEl.textContent = label;
+      await new Promise(r=>setTimeout(r, delay));
+    }
+  };
+  runSteps();
+
+  try{
+    const result = await callUploadAPI(uploadImageData);
+    currentUploadResult = result;
+    scanOv.style.display='none';
+    showUploadResults(result);
+
+    sessionStats.total++;sessionStats.totalConf+=result.confidence||0;
+    if(result.verdict==='FAKE'||result.verdict==='DEEPFAKE') sessionStats.fake++;
+    else if(result.verdict==='REAL') sessionStats.real++;
+    else sessionStats.uncertain++;
+    updateHeaderStats();
+    log(`Upload analysis: ${result.verdict} — ${result.confidence}% confidence`,'safe');
+  }catch(err){
+    scanOv.style.display='none';
+    log('Upload error: '+err.message,'danger');
+    // Show error inline on the preview
+    document.getElementById('uploadScanText').textContent = '✕ FAILED';
+    document.getElementById('uploadScanStep').textContent = err.message;
+    document.getElementById('uploadScanStep').style.color = 'var(--danger)';
+    scanOv.style.display = 'flex';
+    setTimeout(()=>{ scanOv.style.display='none'; }, 4000);
+    document.getElementById('uploadAnalyzeBtn').disabled=false;
+  }
+}
+
+async function callUploadAPI(imageB64){
+  const prompt = `You are an advanced forensic AI image analysis system. Thoroughly analyze this image across ALL dimensions.
+
+Return ONLY a valid JSON object, absolutely no markdown or preamble:
+{"verdict":"REAL or AI_GENERATED or DEEPFAKE or MANIPULATED or UNCERTAIN","confidence":0-100,"authenticity_score":0-100,"manipulation_risk":0-100,"ai_generation_probability":0-100,"deepfake_probability":0-100,"real_photo_probability":0-100,"image_type":"PHOTOGRAPH or AI_ART or ILLUSTRATION or SCREENSHOT or COMPOSITE or UNKNOWN","likely_source":"e.g. DSLR photo or Midjourney or Stable Diffusion or FaceSwap or Phone camera or Unknown","estimated_year":"e.g. 2023 or Unknown","has_face":true or false,"face_count":0,"facial_coherence":"HIGH or MEDIUM or LOW or N/A","texture_artifacts":"NONE or MINOR or SIGNIFICANT","edge_consistency":"CONSISTENT or INCONSISTENT or INDETERMINATE","skin_uniformity":"NATURAL or SUSPICIOUS or INDETERMINATE","lighting_consistency":"CONSISTENT or INCONSISTENT or INDETERMINATE","background_coherence":"NATURAL or SUSPICIOUS or INDETERMINATE","noise_pattern":"NATURAL or SYNTHETIC or INDETERMINATE","compression_artifacts":"NONE or MINOR or SIGNIFICANT","metadata_consistency":"CONSISTENT or SUSPICIOUS or UNKNOWN","summary":"2-3 sentence explanation","full_report":"4-6 sentence forensic report","red_flags":["suspicious elements"],"positive_signals":["genuine elements"],"suggestions":["3 analyst tips"],"tool_signatures":["AI signatures detected"]}`;
+
+  let res, data;
+  try {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1200,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: uploadMediaType, data: imageB64 } },
+            { type: "text", text: prompt }
+          ]
+        }]
+      })
+    });
+  } catch(networkErr) {
+    throw new Error('Network error — check your connection: ' + networkErr.message);
+  }
+
+  if (!res.ok) {
+    const errText = await res.text().catch(()=>'');
+    throw new Error(`API error ${res.status}: ${errText.slice(0,120)}`);
+  }
+
+  data = await res.json();
+
+  if (data.error) throw new Error('API: ' + (data.error.message || JSON.stringify(data.error)));
+
+  const raw = (data.content || []).map(b => b.text || '').join('').trim();
+  if (!raw) throw new Error('Empty response from API');
+
+  const clean = raw.replace(/```json|```/g, '').trim();
+  try {
+    return JSON.parse(clean);
+  } catch(parseErr) {
+    // Try to extract JSON from anywhere in the response
+    const match = clean.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error('Could not parse AI response as JSON');
+  }
+}
+
+function showUploadResults(r){
+  const verdict = r.verdict || 'UNCERTAIN';
+  const conf    = r.confidence || 0;
+  const risk    = r.manipulation_risk || 0;
+
+  const scheme = {
+    REAL:        {border:'var(--accent)',  color:'var(--accent)',  icon:'✅', bg:'rgba(0,245,196,0.1)',  label:'AUTHENTIC REAL PHOTO'},
+    AI_GENERATED:{border:'var(--accent2)', color:'var(--accent2)', icon:'🤖', bg:'rgba(0,196,245,0.1)',  label:'AI GENERATED IMAGE'},
+    DEEPFAKE:    {border:'var(--danger)',  color:'var(--danger)',  icon:'⚠️', bg:'rgba(255,51,102,0.1)',  label:'DEEPFAKE DETECTED'},
+    MANIPULATED: {border:'var(--warn)',    color:'var(--warn)',    icon:'✂️', bg:'rgba(255,184,0,0.1)',   label:'IMAGE MANIPULATED'},
+    UNCERTAIN:   {border:'var(--muted)',   color:'var(--text)',    icon:'❓', bg:'rgba(58,85,119,0.15)', label:'UNABLE TO DETERMINE'},
+  }[verdict] || {border:'var(--muted)',color:'var(--text)',icon:'❓',bg:'rgba(58,85,119,0.15)',label:'UNCERTAIN'};
+
+  // — Verdict top area —
+  const top = document.getElementById('uVerdictTop');
+  top.style.background = scheme.bg;
+  top.style.borderBottom = `1px solid ${scheme.border}`;
+  document.getElementById('uVerdictIcon').textContent  = scheme.icon;
+  document.getElementById('uVerdictLabel').textContent = verdict.replace(/_/g,' ');
+  document.getElementById('uVerdictLabel').style.color = scheme.color;
+  document.getElementById('uVerdictSub').textContent   = scheme.label + (r.likely_source ? ' · ' + r.likely_source : '');
+  document.getElementById('uVerdictSub').style.color   = scheme.color;
+
+  // — Confidence bar —
+  document.getElementById('uConfText').textContent    = conf + '%';
+  document.getElementById('uConfText').style.color    = scheme.color;
+  document.getElementById('uConfBar').style.width     = conf + '%';
+  document.getElementById('uConfBar').style.background = scheme.color;
+
+  // — Score rows —
+  const scores = [
+    {label:'REAL PHOTO',    val:r.real_photo_probability||0,    color:'var(--accent)'},
+    {label:'AI GENERATED',  val:r.ai_generation_probability||0, color:'var(--accent2)'},
+    {label:'DEEPFAKE',      val:r.deepfake_probability||0,      color:'var(--danger)'},
+    {label:'MANIPULATION',  val:r.manipulation_risk||0,         color:'var(--warn)'},
+    {label:'AUTHENTICITY',  val:r.authenticity_score||0,        color:'var(--accent)'},
+  ];
+  document.getElementById('uScoreRows').innerHTML = scores.map(s=>`
+    <div>
+      <div style="display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">
+        <span>${s.label}</span>
+        <span style="color:${s.color};font-weight:600">${s.val}%</span>
+      </div>
+      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${s.val}%;background:${s.color};border-radius:3px;transition:width 1.2s ease"></div>
+      </div>
+    </div>`).join('');
+
+  // — Attributes —
+  const tCol = v => ['HIGH','CONSISTENT','NATURAL','NONE'].includes(v)?'var(--accent)':['LOW','INCONSISTENT','SIGNIFICANT'].includes(v)?'var(--danger)':'var(--warn)';
+  const attribs = [
+    {k:'Image Type',      v:r.image_type||'—',               c:'var(--text)'},
+    {k:'Faces Found',     v:r.has_face?(r.face_count||1)+' face(s)':'None', c:r.has_face?'var(--accent)':'var(--muted)'},
+    {k:'Facial Coherence',v:r.facial_coherence||'—',          c:tCol(r.facial_coherence)},
+    {k:'Texture',         v:r.texture_artifacts||'—',         c:tCol(r.texture_artifacts)},
+    {k:'Edges',           v:r.edge_consistency||'—',          c:tCol(r.edge_consistency)},
+    {k:'Skin',            v:r.skin_uniformity||'—',           c:tCol(r.skin_uniformity)},
+    {k:'Lighting',        v:r.lighting_consistency||'—',      c:tCol(r.lighting_consistency)},
+    {k:'Background',      v:r.background_coherence||'—',      c:tCol(r.background_coherence)},
+    {k:'Noise',           v:r.noise_pattern||'—',             c:tCol(r.noise_pattern)},
+    {k:'Compression',     v:r.compression_artifacts||'—',     c:tCol(r.compression_artifacts)},
+  ];
+  document.getElementById('uAttribs').innerHTML = attribs.map(a=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)">${a.k}</span>
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:14px;color:${a.c}">${a.v}</span>
+    </div>`).join('');
+
+  // — Red flags + tool signatures —
+  const flags = r.red_flags||[];
+  const sigs   = r.tool_signatures||[];
+  const flagHTML = flags.map(f=>`
+    <div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--danger);flex-shrink:0">🚨</span>
+      <span style="font-size:10px;color:var(--text);line-height:1.5">${f}</span>
+    </div>`).join('');
+  const sigHTML = sigs.map(s=>`
+    <div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--accent2);flex-shrink:0">🔬</span>
+      <span style="font-size:10px;color:var(--text)">${s}</span>
+    </div>`).join('');
+  document.getElementById('uRedFlags').innerHTML =
+    (flagHTML || '<div style="font-family:Share Tech Mono,monospace;font-size:9px;color:var(--muted);padding:4px 0">No red flags found</div>') +
+    (sigHTML ? `<div style="margin-top:8px;font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:2px">TOOL SIGNATURES</div>${sigHTML}` : '');
+
+  // — Report —
+  const positives = (r.positive_signals||[]).map(p=>`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="color:var(--accent)">✓</span><span>${p}</span></div>`).join('');
+  document.getElementById('uReport').innerHTML =
+    `<div style="background:rgba(0,0,0,0.25);border-left:3px solid ${scheme.border};padding:12px 14px;border-radius:0 3px 3px 0;color:var(--text);line-height:1.7;margin-bottom:10px">${r.full_report||r.summary||'No report available.'}</div>` +
+    (positives ? `<div style="font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">POSITIVE SIGNALS</div><div style="font-size:10px;color:var(--text)">${positives}</div>` : '') +
+    (r.estimated_year && r.estimated_year!=='Unknown' ? `<div style="margin-top:8px;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)">EST. DATE: <span style="color:var(--text)">${r.estimated_year}</span></div>` : '');
+
+  // — Image badge & risk bar —
+  const badge = document.getElementById('uploadImgBadge');
+  badge.textContent  = verdict.replace(/_/g,' ');
+  badge.style.cssText = `display:block;position:absolute;top:12px;left:12px;padding:5px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;letter-spacing:2px;border-radius:2px;background:${scheme.border};color:${verdict==='REAL'?'#000':'#fff'}`;
+  document.getElementById('uploadImgFrame').style.borderColor = scheme.border;
+
+  const rb = document.getElementById('uploadRiskBar');
+  rb.style.display = 'block';
+  rb.style.background = `linear-gradient(90deg, var(--safe) 0%, var(--warn) 50%, var(--danger) 100%)`;
+  rb.style.clipPath = `inset(0 ${100-risk}% 0 0)`;
+
+  // — Show export button —
+  document.getElementById('uExportBtn').style.display = 'block';
+}
+
+function exportUploadReport(){
+  if(!currentUploadResult) return;
+  const r = currentUploadResult;
+  const lines = [
+    'DEEPSCAN v2.0 — IMAGE FORENSIC REPORT',
+    `Generated: ${new Date().toLocaleString()}`,
+    '─'.repeat(50),
+    '',
+    '=== VERDICT ===',
+    `Result:           ${r.verdict}`,
+    `Confidence:       ${r.confidence}%`,
+    `Likely Source:    ${r.likely_source||'Unknown'}`,
+    `Image Type:       ${r.image_type||'Unknown'}`,
+    `Estimated Year:   ${r.estimated_year||'Unknown'}`,
+    '',
+    '=== SCORES ===',
+    `Real Photo:       ${r.real_photo_probability}%`,
+    `AI Generated:     ${r.ai_generation_probability}%`,
+    `Deepfake:         ${r.deepfake_probability}%`,
+    `Manipulation Risk:${r.manipulation_risk}%`,
+    `Authenticity:     ${r.authenticity_score}%`,
+    '',
+    '=== TECHNICAL ===',
+    `Faces:            ${r.has_face ? r.face_count+' detected' : 'None'}`,
+    `Facial Coherence: ${r.facial_coherence}`,
+    `Texture:          ${r.texture_artifacts}`,
+    `Edges:            ${r.edge_consistency}`,
+    `Noise:            ${r.noise_pattern}`,
+    `Lighting:         ${r.lighting_consistency}`,
+    `Background:       ${r.background_coherence}`,
+    `Compression:      ${r.compression_artifacts}`,
+    '',
+    '=== RED FLAGS ===',
+    ...(r.red_flags||['None']).map(f=>'• '+f),
+    '',
+    '=== TOOL SIGNATURES ===',
+    ...(r.tool_signatures?.length ? r.tool_signatures.map(s=>'• '+s) : ['None detected']),
+    '',
+    '=== FULL ANALYSIS ===',
+    r.full_report || r.summary || 'N/A',
+  ];
+  const blob = new Blob([lines.join('\n')],{type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `deepscan-report-${Date.now()}.txt`;
+  a.click();
+  log('Report exported','safe');
+}
+
+function clearUpload(){
+  uploadImageData = null;
+  currentUploadResult = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('uploadDropState').style.display = 'block';
+  document.getElementById('uploadPreviewState').style.display = 'none';
+  document.getElementById('uploadAnalyzeBtn').disabled = true;
+
+  // Reset right panel
+  document.getElementById('uVerdictTop').style.background = 'rgba(0,0,0,0.3)';
+  document.getElementById('uVerdictTop').style.borderBottom = '1px solid var(--border)';
+  document.getElementById('uVerdictIcon').textContent  = '🔍';
+  document.getElementById('uVerdictLabel').textContent = 'AWAITING IMAGE';
+  document.getElementById('uVerdictLabel').style.color = 'var(--muted)';
+  document.getElementById('uVerdictSub').textContent   = 'Upload an image to begin analysis';
+  document.getElementById('uVerdictSub').style.color   = 'var(--muted)';
+  document.getElementById('uConfText').textContent = '—';
+  document.getElementById('uConfBar').style.width  = '0%';
+  document.getElementById('uScoreRows').innerHTML  = '<div style="font-family:Share Tech Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:10px 0">Run analysis to see scores</div>';
+  document.getElementById('uAttribs').innerHTML    = '<div style="font-family:Share Tech Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:8px 0">—</div>';
+  document.getElementById('uRedFlags').innerHTML   = '<div style="font-family:Share Tech Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:8px 0">—</div>';
+  document.getElementById('uReport').innerHTML     = 'Upload and analyze an image to generate a full forensic report.';
+  document.getElementById('uExportBtn').style.display = 'none';
+}
+
+async function generateImprovements(){
+  if(!sessionStats.total){alert('Run some scans first!');return;}
+  const btn=document.getElementById('genTipsBtn');btn.disabled=true;btn.textContent='⏳ Generating...';
+  const sums=scanHistory.slice(0,5).map(h=>`${h.verdict} (${h.conf}% conf, risk ${h.risk}%): ${h.summary}`).join('\n');
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:600,messages:[{role:"user",content:`Based on these deepfake detection results:\n${sums}\n\nStats: ${sessionStats.total} total, ${sessionStats.fake} fakes, avg confidence ${Math.round(sessionStats.totalConf/sessionStats.total)}%, max risk ${sessionStats.maxRisk}%.\n\nGive 4 specific, actionable improvement suggestions to improve detection accuracy. Return ONLY a JSON array: [{"tip":"...","priority":"high|medium|low"}]. No markdown.`}]})
+    });
+    const data=await res.json();const raw=data.content?.map(b=>b.text||'').join('')||'';
+    const tips=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    document.getElementById('aiImprovements').innerHTML=tips.map(t=>{const cls=t.priority==='high'?'danger':t.priority==='medium'?'warn':'';return`<div class="suggestion-item ${cls}"><div class="suggestion-icon">${t.priority==='high'?'🔴':t.priority==='medium'?'🟡':'🟢'}</div><div class="suggestion-text">${t.tip}</div></div>`;}).join('');
+  }catch(err){document.getElementById('aiImprovements').innerHTML='<div class="suggestion-empty" style="color:var(--danger)">Error generating tips. Try again.</div>';}
+  btn.disabled=false;btn.textContent='✨ Generate Tips From My Session';
+}
+
+function clearHistory(){
+  scanHistory=[];sessionStats={total:0,fake:0,real:0,uncertain:0,totalConf:0,maxRisk:0};
+  updateHeaderStats();renderHistory();log('History cleared','warn');
+}
+
+function exportReport(){
+  if(!scanHistory.length){alert('No scan data to export.');return;}
+  const avg=sessionStats.total?Math.round(sessionStats.totalConf/sessionStats.total):0;
+  const lines=[`DEEPSCAN v2.0 — SESSION REPORT`,`Generated: ${new Date().toLocaleString()}`,``,
+    `SUMMARY`,`Total Scans: ${sessionStats.total}`,`Fakes Detected: ${sessionStats.fake}`,
+    `Real Verified: ${sessionStats.real}`,`Uncertain: ${sessionStats.uncertain}`,
+    `Avg Confidence: ${avg}%`,`Max Risk Seen: ${sessionStats.maxRisk}%`,``,`SCAN LOG`,
+    ...scanHistory.map(h=>`[${h.time}] ${h.verdict} | ${h.conf}% confidence | Risk ${h.risk}% | ${h.summary}`)
+  ];
+  const blob=new Blob([lines.join('\n')],{type:'text/plain'});
+  const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='deepscan-report-'+Date.now()+'.txt';link.click();
+  log('Report exported','safe');
+}
+
+function playBeep(){
+  try{const a=new AudioContext(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.frequency.value=880;o.type='square';g.gain.setValueAtTime(0.08,a.currentTime);g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.3);o.start(a.currentTime);o.stop(a.currentTime+0.3);}catch(e){}
+}
+
+log('DeepScan v2.0 initialized','safe');
+log('Camera, upload, AI suggestions & export ready');
+
+// ═══════════════════════════════════════════════════
+// IMAGE UPLOAD — pure vanilla JS, uses same callAPI proxy
+// ═══════════════════════════════════════════════════
+let upImgB64 = null, upImgResult = null, upScanTimer = null;
+const UP_STEPS = ['READING PIXEL DATA...','DETECTING FACES...','ANALYZING TEXTURE & ARTIFACTS...','CHECKING GAN SIGNATURES...','RUNNING DEEPFAKE MODELS...','GENERATING FORENSIC REPORT...'];
+const UP_PROMPT = `You are an advanced forensic AI image analysis system. Analyze this image thoroughly.
+Return ONLY valid JSON, no markdown:
+{"verdict":"REAL or AI_GENERATED or DEEPFAKE or MANIPULATED or UNCERTAIN","confidence":0,"authenticity_score":0,"manipulation_risk":0,"ai_generation_probability":0,"deepfake_probability":0,"real_photo_probability":0,"image_type":"PHOTOGRAPH or AI_ART or ILLUSTRATION or SCREENSHOT or COMPOSITE or UNKNOWN","likely_source":"string describing origin","has_face":false,"face_count":0,"facial_coherence":"HIGH or MEDIUM or LOW or N/A","texture_artifacts":"NONE or MINOR or SIGNIFICANT","edge_consistency":"CONSISTENT or INCONSISTENT or INDETERMINATE","skin_uniformity":"NATURAL or SUSPICIOUS or INDETERMINATE","lighting_consistency":"CONSISTENT or INCONSISTENT or INDETERMINATE","background_coherence":"NATURAL or SUSPICIOUS or INDETERMINATE","noise_pattern":"NATURAL or SYNTHETIC or INDETERMINATE","compression_artifacts":"NONE or MINOR or SIGNIFICANT","full_report":"4-6 sentence forensic report","red_flags":["specific suspicious elements"],"positive_signals":["genuine authentic elements"],"tool_signatures":["AI tool signatures detected"]}`;
+
+const UP_SCHEMES = {
+  REAL:        {color:'var(--accent)',  bg:'rgba(0,245,196,0.12)',  border:'var(--accent)',  icon:'✅', label:'AUTHENTIC REAL PHOTO'},
+  AI_GENERATED:{color:'var(--accent2)', bg:'rgba(0,196,245,0.12)',  border:'var(--accent2)', icon:'🤖', label:'AI GENERATED IMAGE'},
+  DEEPFAKE:    {color:'var(--danger)',  bg:'rgba(255,51,102,0.12)', border:'var(--danger)',  icon:'⚠️', label:'DEEPFAKE DETECTED'},
+  MANIPULATED: {color:'var(--warn)',    bg:'rgba(255,184,0,0.12)',  border:'var(--warn)',    icon:'✂️', label:'IMAGE MANIPULATED'},
+  UNCERTAIN:   {color:'#8899bb',       bg:'rgba(58,85,119,0.15)',  border:'var(--muted)',   icon:'❓', label:'UNABLE TO DETERMINE'},
+};
+
+function upLoadFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  upImgB64 = null; upImgResult = null;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      // Compress to max 1024px
+      const MAX = 1024; let w = img.width, h = img.height;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = c.toDataURL('image/jpeg', 0.85);
+      upImgB64 = dataUrl.split(',')[1];
+      // Show preview
+      document.getElementById('upDropZone').style.display = 'none';
+      document.getElementById('upPreviewZone').style.display = 'block';
+      document.getElementById('upImg').src = dataUrl;
+      document.getElementById('upImgFrame').style.borderColor = 'var(--border)';
+      document.getElementById('upBadge').style.display = 'none';
+      document.getElementById('upRiskBar').style.display = 'none';
+      document.getElementById('upError').style.display = 'none';
+      const kb = Math.round(upImgB64.length * 0.75 / 1024);
+      document.getElementById('upMeta').innerHTML =
+        `<span style="color:var(--accent)">FILE</span> ${file.name.length>24?file.name.slice(0,22)+'…':file.name}&nbsp;&nbsp;` +
+        `<span style="color:var(--accent)">SIZE</span> ${kb<1024?kb+'KB':(kb/1024).toFixed(1)+'MB'}&nbsp;&nbsp;` +
+        `<span style="color:var(--accent)">DIMS</span> ${w}×${h}px&nbsp;&nbsp;` +
+        `<span style="color:var(--accent)">RATIO</span> ${(w/h).toFixed(2)}:1`;
+      document.getElementById('upAnalyzeBtn').disabled = false;
+      log('Image loaded: ' + file.name + ' (' + kb + 'KB)', 'safe');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function upAnalyze() {
+  if (!upImgB64) return;
+  document.getElementById('upAnalyzeBtn').disabled = true;
+  document.getElementById('upError').style.display = 'none';
+  const ov = document.getElementById('upScanOv');
+  ov.style.display = 'flex';
+  let si = 0;
+  upScanTimer = setInterval(() => {
+    // Only cycle steps when not in a countdown
+    if (!document.getElementById('upScanStep').textContent.includes('RETRYING')) {
+      document.getElementById('upScanStep').textContent = UP_STEPS[si++ % UP_STEPS.length];
+    }
+  }, 700);
+
+  const MAX_RETRIES = 3;
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        const waitSecs = attempt * 15;
+        log(`Rate limited (429) — waiting ${waitSecs}s before retry ${attempt}/${MAX_RETRIES}`, 'warn');
+        clearInterval(upScanTimer);
+        for (let s = waitSecs; s > 0; s--) {
+          document.getElementById('upScanStep').textContent = `RATE LIMITED — RETRYING IN ${s}s...`;
+          document.getElementById('imgScanTxt') && (document.getElementById('imgScanTxt').textContent = 'WAITING...');
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        document.getElementById('upScanStep').textContent = 'RETRYING REQUEST...';
+        si = 0;
+        upScanTimer = setInterval(() => {
+          document.getElementById('upScanStep').textContent = UP_STEPS[si++ % UP_STEPS.length];
+        }, 700);
+      }
+
+      let res;
+      try {
+        res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 1100,
+            messages: [{ role: "user", content: [
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: upImgB64 } },
+              { type: "text", text: UP_PROMPT }
+            ]}]
+          })
+        });
+      } catch(e) { throw new Error('Network error: ' + e.message); }
+
+      if (res.status === 429) {
+        if (attempt < MAX_RETRIES) continue;
+        throw new Error('Rate limit exceeded after ' + MAX_RETRIES + ' retries. Please wait 1-2 minutes before trying again.');
+      }
+      if (!res.ok) {
+        const t = await res.text().catch(()=>'');
+        let msg = 'API ' + res.status;
+        try { const j = JSON.parse(t); msg = j.error?.message || msg; } catch(e) {}
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || 'unknown API error');
+
+      const raw = (data.content || []).map(b => b.text || '').join('').trim();
+      const clean = raw.replace(/```json|```/g, '').trim();
+      let r;
+      try { r = JSON.parse(clean); }
+      catch(e) { const m = clean.match(/\{[\s\S]*\}/); if(m) r = JSON.parse(m[0]); else throw new Error('Parse error'); }
+
+      upImgResult = r;
+      upShowResult(r);
+      sessionStats.total++;
+      sessionStats.totalConf += r.confidence || 0;
+      if (['DEEPFAKE','AI_GENERATED','MANIPULATED'].includes(r.verdict)) sessionStats.fake++;
+      else if (r.verdict === 'REAL') sessionStats.real++;
+      else sessionStats.uncertain++;
+      if ((r.manipulation_risk||0) > sessionStats.maxRisk) sessionStats.maxRisk = r.manipulation_risk||0;
+      updateHeaderStats();
+      const entry = {verdict:r.verdict, conf:r.confidence||0, risk:r.manipulation_risk||0, time:new Date().toLocaleTimeString(), summary:r.full_report?.slice(0,60)||r.summary||''};
+      scanHistory.unshift(entry); if(scanHistory.length>20) scanHistory.pop();
+      renderHistory();
+      log('Upload: ' + r.verdict + ' — ' + (r.confidence||0) + '% confidence', 'safe');
+      break; // success
+
+    } catch(e) {
+      lastError = e;
+      const eb = document.getElementById('upError');
+      if (e.message.includes('Rate limit') || e.message.includes('429')) {
+        // Will be retried — don't show error yet unless exhausted
+        if (attempt >= MAX_RETRIES) {
+          eb.textContent = '⚠ Rate limit exceeded after retries. Please wait 1–2 minutes then click Analyze again.';
+          eb.style.display = 'block';
+          log('Upload failed after retries: ' + e.message, 'danger');
+        }
+      } else {
+        // Non-rate-limit error — stop immediately
+        eb.textContent = '⚠ ' + e.message; eb.style.display = 'block';
+        log('Upload error: ' + e.message, 'danger');
+        break;
+      }
+    }
+  }
+
+  clearInterval(upScanTimer);
+  ov.style.display = 'none';
+  document.getElementById('upAnalyzeBtn').disabled = false;
+}
+
+function upShowResult(r) {
+  const v = r.verdict || 'UNCERTAIN', conf = r.confidence || 0, risk = r.manipulation_risk || 0;
+  const sc = UP_SCHEMES[v] || UP_SCHEMES.UNCERTAIN;
+
+  // Verdict top
+  const top = document.getElementById('upVerdictTop');
+  top.style.background = sc.bg; top.style.borderBottom = '1px solid ' + sc.border;
+  document.getElementById('upVerdictCard').style.borderColor = sc.border;
+  document.getElementById('upVerdictIcon').textContent = sc.icon;
+  document.getElementById('upVerdictLabel').textContent = v.replace(/_/g,' ');
+  document.getElementById('upVerdictLabel').style.color = sc.color;
+  document.getElementById('upVerdictSub').textContent = sc.label + (r.likely_source ? ' · ' + r.likely_source : '');
+  document.getElementById('upVerdictSub').style.color = sc.color;
+  document.getElementById('upConfTxt').textContent = conf + '%';
+  document.getElementById('upConfTxt').style.color = sc.color;
+  document.getElementById('upConfBar').style.width = conf + '%';
+  document.getElementById('upConfBar').style.background = sc.color;
+
+  // Score bars
+  const bars = [
+    ['REAL PHOTO',   r.real_photo_probability||0,    'var(--accent)'],
+    ['AI GENERATED', r.ai_generation_probability||0, 'var(--accent2)'],
+    ['DEEPFAKE',     r.deepfake_probability||0,      'var(--danger)'],
+    ['MANIPULATION', r.manipulation_risk||0,         'var(--warn)'],
+    ['AUTHENTICITY', r.authenticity_score||0,        'var(--accent)'],
+  ];
+  document.getElementById('upScores').innerHTML = bars.map(([lbl,val,col]) =>
+    `<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">
+        <span>${lbl}</span><span style="color:${col};font-weight:700">${val}%</span>
+      </div>
+      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${val}%;background:${col};border-radius:3px;transition:width 1.2s ease"></div>
+      </div>
+    </div>`).join('');
+
+  // Attributes
+  const tc = val => ['HIGH','CONSISTENT','NATURAL','NONE','PHOTOGRAPH'].includes(val)?'var(--accent)':['LOW','INCONSISTENT','SIGNIFICANT','SYNTHETIC','UNNATURAL'].includes(val)?'var(--danger)':val?'var(--warn)':'var(--muted)';
+  const attrs = [
+    ['Image Type', r.image_type], ['Faces', r.has_face?(r.face_count||1)+' face(s)':'None'],
+    ['Facial Coherence', r.facial_coherence], ['Texture', r.texture_artifacts],
+    ['Edges', r.edge_consistency], ['Skin', r.skin_uniformity],
+    ['Lighting', r.lighting_consistency], ['Background', r.background_coherence],
+    ['Noise Pattern', r.noise_pattern], ['Compression', r.compression_artifacts],
+  ];
+  document.getElementById('upAttribs').innerHTML = attrs.map(([lbl,val]) =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)">${lbl}</span>
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:13px;color:${tc(val)}">${val||'—'}</span>
+    </div>`).join('');
+
+  // Red flags + tool signatures
+  const flags = r.red_flags || [], sigs = r.tool_signatures || [];
+  let fhtml = flags.map(f =>
+    `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--danger);flex-shrink:0">🚨</span>
+      <span style="font-size:10px;color:var(--text);line-height:1.5">${f}</span>
+    </div>`).join('');
+  if (sigs.length) fhtml += `<div style="font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:2px;margin:10px 0 6px">TOOL SIGNATURES</div>` +
+    sigs.map(s => `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--accent2)">🔬</span><span style="font-size:10px;color:var(--text)">${s}</span></div>`).join('');
+  document.getElementById('upRedFlags').innerHTML = fhtml || '<div style="font-family:Share Tech Mono,monospace;font-size:9px;color:var(--muted)">No red flags detected</div>';
+
+  // Full report + positive signals
+  const pos = r.positive_signals || [];
+  document.getElementById('upReport').innerHTML =
+    `<div style="border-left:3px solid ${sc.border};font-size:11px;color:var(--text);line-height:1.7;font-style:italic;background:rgba(0,0,0,.2);padding:12px 14px;border-radius:0 3px 3px 0">${r.full_report || r.summary || 'No report available.'}</div>` +
+    (pos.length ? `<div style="font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:2px;margin:10px 0 6px">POSITIVE SIGNALS</div>` +
+      pos.map(p => `<div style="display:flex;gap:6px;font-size:10px;color:var(--text);padding:3px 0"><span style="color:var(--accent)">✓</span>${p}</div>`).join('') : '');
+
+  // Image badge + risk bar
+  const badge = document.getElementById('upBadge');
+  badge.textContent = v.replace(/_/g,' ');
+  badge.style.cssText = `display:block;position:absolute;top:12px;left:12px;padding:5px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;letter-spacing:2px;border-radius:2px;background:${sc.border};color:${v==='REAL'?'#000':'#fff'}`;
+  document.getElementById('upImgFrame').style.borderColor = sc.border;
+  const rb = document.getElementById('upRiskBar');
+  rb.style.cssText = `display:block;position:absolute;bottom:0;left:0;right:0;height:5px;background:linear-gradient(90deg,#00f5c4 0%,#ffb800 50%,#ff3366 100%);clip-path:inset(0 ${100-risk}% 0 0)`;
+
+  document.getElementById('upExportBtn').style.display = 'block';
+}
+
+function upClear() {
+  upImgB64 = null; upImgResult = null;
+  document.getElementById('upFileInput').value = '';
+  document.getElementById('upDropZone').style.display = 'block';
+  document.getElementById('upPreviewZone').style.display = 'none';
+  document.getElementById('upAnalyzeBtn').disabled = true;
+  document.getElementById('upExportBtn').style.display = 'none';
+  document.getElementById('upRateHint').style.display = 'none';
+  // Reset panel
+  document.getElementById('upVerdictCard').style.borderColor = 'var(--border)';
+  document.getElementById('upVerdictTop').style.background = 'rgba(0,0,0,.3)';
+  document.getElementById('upVerdictTop').style.borderBottom = '1px solid var(--border)';
+  document.getElementById('upVerdictIcon').textContent = '🔍';
+  document.getElementById('upVerdictLabel').textContent = 'AWAITING IMAGE';
+  document.getElementById('upVerdictLabel').style.color = 'var(--muted)';
+  document.getElementById('upVerdictSub').textContent = 'Upload an image to begin analysis';
+  document.getElementById('upVerdictSub').style.color = 'var(--muted)';
+  document.getElementById('upConfTxt').textContent = '—';
+  document.getElementById('upConfBar').style.width = '0%';
+  document.getElementById('upScores').innerHTML = '<div style="font-family:Share Tech Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:10px 0">Run analysis to see scores</div>';
+  document.getElementById('upAttribs').innerHTML = '<div style="font-family:Share Tech Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:8px 0">—</div>';
+  document.getElementById('upRedFlags').innerHTML = '<div style="font-family:Share Tech Mono,monospace;font-size:9px;color:var(--muted)">—</div>';
+  document.getElementById('upReport').textContent = 'Upload and analyze an image to generate a full forensic report.';
+}
+
+function upExport() {
+  if (!upImgResult) return;
+  const r = upImgResult;
+  const lines = [
+    'DEEPSCAN — IMAGE FORENSIC REPORT', 'Generated: ' + new Date().toLocaleString(), '',
+    '=== VERDICT ===', 'Result: ' + r.verdict, 'Confidence: ' + r.confidence + '%', 'Source: ' + (r.likely_source||'Unknown'), '',
+    '=== SCORES ===', 'Real Photo: '+(r.real_photo_probability||0)+'%', 'AI Generated: '+(r.ai_generation_probability||0)+'%',
+    'Deepfake: '+(r.deepfake_probability||0)+'%', 'Manipulation: '+(r.manipulation_risk||0)+'%', 'Authenticity: '+(r.authenticity_score||0)+'%', '',
+    '=== TECHNICAL ===', 'Faces: '+(r.has_face?(r.face_count||1)+' detected':'None'),
+    'Facial Coherence: '+r.facial_coherence, 'Texture: '+r.texture_artifacts,
+    'Edges: '+r.edge_consistency, 'Noise: '+r.noise_pattern, 'Lighting: '+r.lighting_consistency, 'Background: '+r.background_coherence, '',
+    '=== RED FLAGS ===', ...(r.red_flags||['None']).map(f=>'• '+f), '',
+    '=== TOOL SIGNATURES ===', ...(r.tool_signatures?.length?r.tool_signatures.map(s=>'• '+s):['None detected']), '',
+    '=== FULL ANALYSIS ===', r.full_report||'N/A',
+  ];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/plain'}));
+  a.download = 'deepscan-image-report-' + Date.now() + '.txt'; a.click();
+  log('Image report exported', 'safe');
+}
+</script>
+</body>
+</html>
